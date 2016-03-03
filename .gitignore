@@ -1,0 +1,13 @@
+*.ncb
+*.sdf
+*.opensdf
+*.suo
+*.user
+*.png
+*.bmp
+*.jpg
+Debug_NTS/*
+Debug_TS/*
+Release_NTS/*
+Release_TS/*
+docs/*
