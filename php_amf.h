@@ -1,11 +1,17 @@
 /**
- * amf encoding and decoding of AMF and AMF3 data
+ * PHP extension for Action Message Format (AMF) encoding and decoding with support for AMF0 and AMF3
  * 
- * @license http://opensource.org/licenses/php.php PHP License Version 3
- * @copyright (c) 2006-2007 Emanuele Ruffaldi emanuele.ruffaldi@gmail.com
- * @author Emanuele Ruffaldi
+ * amfext (http://emilmalinov.com/amfext)
  *
+ * @copyright Copyright (c) 2015 Emil Malinov
+ * @license   http://www.apache.org/licenses/LICENSE-2.0 Apache License 2.0
+ * @link      http://github.com/emilkm/amfext
+ * @package   amfext
+ * 
+ * @author    Emanuele Ruffaldi emanuele.ruffaldi@gmail.com - majority of the work
+ * @author    Emil Malinov - bug fixes, enhancements, PHP version compatibility maintenance, unit tests                                 
  */
+
 #ifndef PHP_AMF_H
 #define PHP_AMF_H 1
 
