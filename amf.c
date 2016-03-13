@@ -1,19 +1,17 @@
 /**
- * amf encoding and decoding of AMF and AMF3 data
+ * PHP extension for Action Message Format (AMF) encoding and decoding with support for AMF0 and AMF3
+ * 
+ * amfext (http://emilmalinov.com/amfext)
  *
- * @license http://opensource.org/licenses/php.php PHP License Version 3
- * @copyright (c) 2006-2007 Emanuele Ruffaldi emanuele.ruffaldi@gmail.com
- * @author Emanuele Ruffaldi emanuele.ruffaldi@gmail.com
- *
- *
- * Naming of Functions:
- *
- * amf_write_       performs low level writing into the buffer
- * amf0_write_      writes some C value in AMF0
- * amf3_write_      writes some C value in AMF3
- * amf0_serialize_  writes a C value in AMF0 with the correct AMF type byte
- * amf3_serialize_  writes a C value in AMF0 with the correct AMF type byte
+ * @copyright Copyright (c) 2015 Emil Malinov
+ * @license   http://www.apache.org/licenses/LICENSE-2.0 Apache License 2.0
+ * @link      http://github.com/emilkm/amfext
+ * @package   amfext
+ * 
+ * @author    Emanuele Ruffaldi emanuele.ruffaldi@gmail.com - majority of the work
+ * @author    Emil Malinov - bug fixes, enhancements, PHP version compatibility maintenance, unit tests                                 
  */
+
 #undef _DEBUG
 #ifdef HAVE_CONFIG_H
 #include "config.h"
