@@ -1070,7 +1070,7 @@ static void amf3_serialize_object_anonymous(amf_serialize_output buf, HashTable 
             amf3_write_string(buf, txt, strlen(txt), AMF_STRING_AS_SAFE_TEXT, var_hash TSRMLS_CC);
         } else if (keyType == HASH_KEY_IS_STRING) {
             /* Don't write protected properties or explicit type */
-            if (key[0] == 0 || key == "_explicitType") {
+            if (key[0] == 0 || strcmp(key, "_explicitType") == 0) {
                 continue;
             }
             amf3_write_string(buf, key, key_len - 1, AMF_STRING_AS_TEXT, var_hash TSRMLS_CC);
@@ -1120,7 +1120,7 @@ static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *myh
         }
 
         /* Don't write protected properties or explicit type */
-        if (keyType != HASH_KEY_IS_STRING || (keyType == HASH_KEY_IS_STRING && (key[0] == 0 || key == "_explicitType"))) {
+        if (keyType != HASH_KEY_IS_STRING || (keyType == HASH_KEY_IS_STRING && (key[0] == 0 || strcmp(key, "_explicitType") == 0))) {
             continue;
         }
 
@@ -1186,7 +1186,7 @@ static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *myh
 
             if (keyType == HASH_KEY_IS_STRING) {
                 /* Don't write protected properties or explicit type */
-                if (key[0] == 0 || key == "_explicitType") {
+                if (key[0] == 0 || strcmp(key, "_explicitType") == 0) {
                     continue;
                 }
             
@@ -1208,7 +1208,7 @@ static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *myh
 
             if (keyType == HASH_KEY_IS_STRING) {
                 /* Don't write protected properties or explicit type */
-                if (key[0] == 0 || key == "_explicitType") {
+                if (key[0] == 0 || strcmp(key, "_explicitType") == 0) {
                     continue;
                 }
                 amf3_write_string(buf, key, key_len - 1, AMF_STRING_AS_TEXT, var_hash TSRMLS_CC);
@@ -1344,7 +1344,7 @@ static void amf3_serialize_object(amf_serialize_output buf, zval **struc, amf_se
     }
 
     if ((strcmp(className, "stdClass") == 0 && explicitTypeIsSet == 0)
-        || (explicitTypeIsSet == 1 && Z_TYPE_PP(explicitType) == IS_STRING && Z_STRVAL_PP(explicitType) == "")
+        || (explicitTypeIsSet == 1 && Z_TYPE_PP(explicitType) == IS_STRING && Z_STRLEN_PP(explicitType) == 0)
     ) {
         amf_cache_zval(&(var_hash->objects), Z_OBJPROP_PP(struc), &objectIndex, &(var_hash->nextObjectIndex), 0);
         amf3_serialize_object_anonymous(buf, Z_OBJPROP_PP(struc), var_hash TSRMLS_CC);
@@ -1516,7 +1516,7 @@ static void amf0_serialize_objectdata(amf_serialize_output buf, HashTable *myht,
             amf_write_string(buf, txt, length AMFTSRMLS_CC);
         } else {
             /* skip private member */
-            if (isArray == 0 && key[0] == 0 && key != "_explicitType") {
+            if (isArray == 0 && (key[0] == 0 || strcmp(key, "_explicitType") == 0)) {
                 continue;
             }
             amf0_write_short(buf, key_len - 1 AMFTSRMLS_CC);
@@ -1567,7 +1567,7 @@ static void amf0_serialize_object(amf_serialize_output buf, zval **struc, amf_se
     }
 
     if ((strcmp(className, "stdClass") == 0 && explicitTypeIsSet == 0)
-        || (explicitTypeIsSet == 1 && Z_TYPE_PP(explicitType) == IS_STRING && Z_STRVAL_PP(explicitType) == "")
+        || (explicitTypeIsSet == 1 && Z_TYPE_PP(explicitType) == IS_STRING && Z_STRLEN_PP(explicitType) == 0)
     ) {
         amf_write_byte(buf, AMF0_OBJECT);
         amf0_serialize_objectdata(buf, Z_OBJPROP_PP(struc), 0, var_hash TSRMLS_CC);
@@ -2051,7 +2051,7 @@ static void amf3_serialize_vector(amf_serialize_output buf, HashTable *myht, amf
                                 }
 
                                 if ((strcmp(className, "stdClass") == 0 && explicitTypeIsSet == 0)
-                                    || (explicitTypeIsSet == 1 && Z_TYPE_PP(explicitType) == IS_STRING && Z_STRVAL_PP(explicitType) == "")
+                                    || (explicitTypeIsSet == 1 && Z_TYPE_PP(explicitType) == IS_STRING && Z_STRLEN_PP(explicitType) == 0)
                                 ) {
                                     className = "Object";
                                     classNameLen = strlen(className);
