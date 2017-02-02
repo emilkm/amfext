@@ -27,7 +27,6 @@
 #include "php_memory_streams.h"
 #include "ext/standard/info.h"
 #include "stdlib.h"
-#include "win32/php_stdint.h"
 
 /*  module Declarations {{{1*/
 
@@ -1103,11 +1102,10 @@ static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *myh
 
 
     /* ti (traits info) is an associative array containing the reference, and an array of property names */
-    propCount = zend_hash_num_elements(myht);
     MAKE_STD_ZVAL(properties);
-    amf_array_init(properties, propCount + 1 TSRMLS_CC);
+    array_init(properties);
     MAKE_STD_ZVAL(ti);
-    amf_array_init(ti, 2 TSRMLS_CC);
+    array_init(ti);
 
     add_assoc_zval(ti, "properties", properties);
     htProperties = HASH_OF(properties);
@@ -1123,7 +1121,7 @@ static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *myh
         if (keyType != HASH_KEY_IS_STRING || (keyType == HASH_KEY_IS_STRING && (key[0] == 0 || strcmp(key, "_explicitType") == 0))) {
             continue;
         }
-
+        propCount++;
         add_assoc_null(properties, key);
     }
 
