@@ -3,7 +3,7 @@
 function build_extension() {
     pushd amfext
         phpize
-        ./configure --enable-debug --disable-all --enable-libxml --enable-simplexml --enable-dom --with-amf
+        ./configure
         make
         make install
     popd
