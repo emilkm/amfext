@@ -1,24 +1,38 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "amf", "amf.vcxproj", "{C10F0DFF-EAD0-4516-A7B9-FF28F046D508}"
+# Visual Studio 14
+VisualStudioVersion = 14.0.24720.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "amf", "amf.vcxproj", "{13F1FA86-5EEE-4841-AB36-20294293107C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		Debug_NTS|Win32 = Debug_NTS|Win32
-		Debug_TS|Win32 = Debug_TS|Win32
-		Release_NTS|Win32 = Release_NTS|Win32
-		Release_TS|Win32 = Release_TS|Win32
+		Debug_NTS|x64 = Debug_NTS|x64
+		Debug_NTS|x86 = Debug_NTS|x86
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release_NTS|x64 = Release_NTS|x64
+		Release_NTS|x86 = Release_NTS|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{C10F0DFF-EAD0-4516-A7B9-FF28F046D508}.Debug_NTS|Win32.ActiveCfg = Debug_NTS|Win32
-		{C10F0DFF-EAD0-4516-A7B9-FF28F046D508}.Debug_NTS|Win32.Build.0 = Debug_NTS|Win32
-		{C10F0DFF-EAD0-4516-A7B9-FF28F046D508}.Debug_TS|Win32.ActiveCfg = Debug_TS|Win32
-		{C10F0DFF-EAD0-4516-A7B9-FF28F046D508}.Debug_TS|Win32.Build.0 = Debug_TS|Win32
-		{C10F0DFF-EAD0-4516-A7B9-FF28F046D508}.Release_NTS|Win32.ActiveCfg = Release_NTS|Win32
-		{C10F0DFF-EAD0-4516-A7B9-FF28F046D508}.Release_NTS|Win32.Build.0 = Release_NTS|Win32
-		{C10F0DFF-EAD0-4516-A7B9-FF28F046D508}.Release_TS|Win32.ActiveCfg = Release_TS|Win32
-		{C10F0DFF-EAD0-4516-A7B9-FF28F046D508}.Release_TS|Win32.Build.0 = Release_TS|Win32
+		{13F1FA86-5EEE-4841-AB36-20294293107C}.Debug_NTS|x64.ActiveCfg = Debug_NTS|x64
+		{13F1FA86-5EEE-4841-AB36-20294293107C}.Debug_NTS|x64.Build.0 = Debug_NTS|x64
+		{13F1FA86-5EEE-4841-AB36-20294293107C}.Debug_NTS|x86.ActiveCfg = Debug_NTS|Win32
+		{13F1FA86-5EEE-4841-AB36-20294293107C}.Debug_NTS|x86.Build.0 = Debug_NTS|Win32
+		{13F1FA86-5EEE-4841-AB36-20294293107C}.Debug|x64.ActiveCfg = Debug|x64
+		{13F1FA86-5EEE-4841-AB36-20294293107C}.Debug|x64.Build.0 = Debug|x64
+		{13F1FA86-5EEE-4841-AB36-20294293107C}.Debug|x86.ActiveCfg = Debug|Win32
+		{13F1FA86-5EEE-4841-AB36-20294293107C}.Debug|x86.Build.0 = Debug|Win32
+		{13F1FA86-5EEE-4841-AB36-20294293107C}.Release_NTS|x64.ActiveCfg = Release_NTS|x64
+		{13F1FA86-5EEE-4841-AB36-20294293107C}.Release_NTS|x64.Build.0 = Release_NTS|x64
+		{13F1FA86-5EEE-4841-AB36-20294293107C}.Release_NTS|x86.ActiveCfg = Release_NTS|Win32
+		{13F1FA86-5EEE-4841-AB36-20294293107C}.Release_NTS|x86.Build.0 = Release_NTS|Win32
+		{13F1FA86-5EEE-4841-AB36-20294293107C}.Release|x64.ActiveCfg = Release|x64
+		{13F1FA86-5EEE-4841-AB36-20294293107C}.Release|x64.Build.0 = Release|x64
+		{13F1FA86-5EEE-4841-AB36-20294293107C}.Release|x86.ActiveCfg = Release|Win32
+		{13F1FA86-5EEE-4841-AB36-20294293107C}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
