@@ -33,14 +33,11 @@ set -e
 
 case $ACTION in
     before_script)
-        # Nothing to do at the moment
-
+        # Build the extension
+        build_extension
     ;;
 
     script)
-        # Build the extension
-        build_extension
-
         # Run tests
         set +e
         run_tests || exit 1
@@ -51,8 +48,4 @@ case $ACTION in
         exit 1
     ;;
 esac
-
-
-
-
 
