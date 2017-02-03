@@ -1223,7 +1223,8 @@ static void amf3_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
 
             // now the linear data, we need to lookup the data because of the sorting
             if (dense_count > 0) {
-                for (int i = 0; i < dense_count; i++) {
+                int i;
+                for (i = 0; i < dense_count; i++) {
                     if ((val = zend_hash_index_find(ht, i)) == NULL) {
                         amf_write_byte(buf, AMF3_UNDEFINED);
                     }
