@@ -1,9 +1,7 @@
 #!/bin/bash
 
 function build_extension() {
-    mkdir "$AMFEXT_BUILD_DIR"
-    
-    pushd "${AMFEXT_BUILD_DIR}"
+    pushd amfext
         phpize
         ./configure --enable-debug --disable-all --enable-libxml --enable-simplexml --enable-dom --with-amf
         make
@@ -16,7 +14,7 @@ function run_tests() {
     export REPORT_EXIT_STATUS=1
     export TEST_PHP_EXECUTABLE=$(which php)
 
-    pushd "${AMFEXT_BUILD_DIR}"
+    pushd amfext
         php run-tests.php --show-diff -d extension=modules/amf.so -n ./tests/*.phpt
         retval=$?
     popd
@@ -25,9 +23,6 @@ function run_tests() {
 
 # Command line arguments
 ACTION=$1
-
-# Where to do the build
-AMFEXT_BUILD_DIR="/tmp/amfext-build"
 
 set -e
 
