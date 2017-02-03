@@ -24,7 +24,7 @@ For PHP5 see the `php56` branch.
 * Removed userland access to StringBuilder.
 * Removed transliteration support. Can look at adding it back if necessary.
 * Fixed various issues from the original version.
-* Added support for Date, XML, Vector types.
+* Added support for Date, ByteArray, XML, XML Document, and Vector types.
 * Changed the object serialization to support traits and traits references.
 
 # TODO
