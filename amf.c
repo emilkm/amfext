@@ -2041,7 +2041,6 @@ PHP_FUNCTION(amf_encode)
     amf_context_data_t var_hash;
     zval *val, *zFlags;
     int flags = 0;
-    int asSB = 0;  // 0 = no, 1 = is received, 2 = is create
     
 #ifdef amf_USE_STRING_BUILDER
     amf_serialize_output_t buf;
@@ -2086,15 +2085,10 @@ PHP_FUNCTION(amf_encode)
         amf0_serialize_var(pbuf, val, &var_hash);
     }
 #ifdef amf_USE_STRING_BUILDER
-    /* flat on regular return as string */
-    if (asSB == 0) {
-        amf_serialize_output_get(pbuf, return_value);
-    }
 
-    /* deallocate if it was wasted */
-    if (asSB != 1) {
-        amf_serialize_output_dtor(&buf);
-    }
+    amf_serialize_output_get(pbuf, return_value);
+    amf_serialize_output_dtor(&buf);
+
 #else
     {
         size_t memsize;
@@ -2552,7 +2546,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                         if (add_next_index_zval(&zClassDef, &key) == SUCCESS) {
                             Z_ADDREF(key);
                         }
-                        zval_ptr_dtor(&key);
+						zval_ptr_dtor(&key);
                     }
 
                     amf_put_in_cache(&(var_hash->traits), &zClassDef);
@@ -2626,7 +2620,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                         }
                         else {
                             add_property_zval(rval, Z_STRVAL_P(key), &value);
-                            zval_ptr_dtor(&value);
+							zval_ptr_dtor(&value);
                         }
                     }
 
@@ -3059,30 +3053,30 @@ PHP_FUNCTION(amf_decode)
     int flags = 0;
     
     switch (ZEND_NUM_ARGS()) {
-        case 0:
-            WRONG_PARAM_COUNT;
-            return;
-        case 1:
-            if (zend_parse_parameters(1, "z", &zInput) == FAILURE) {
-                WRONG_PARAM_COUNT;
-            }
-            break;
-        case 2:
-            if (zend_parse_parameters(2, "zz", &zInput, &zFlags) == FAILURE) {
-                WRONG_PARAM_COUNT;
-            }
-            convert_to_long_ex(zFlags);
-            flags = (int)Z_LVAL_P(zFlags);
-            break;
-        default:
-            if (zend_parse_parameters((ZEND_NUM_ARGS() > 3 ? 4 : 3), "zzz|f", &zInput, &zFlags, &zOffset, &(var_hash.fci), &(var_hash.fci_cache)) == FAILURE) {
-                WRONG_PARAM_COUNT;
-            }
-            convert_to_long_ex(zFlags);
-            convert_to_long_ex(zOffset);
-            flags = (int)Z_LVAL_P(zFlags);
-            offset = (int)Z_LVAL_P(zOffset);
-            break;
+	    case 0:
+	        WRONG_PARAM_COUNT;
+	        return;
+	    case 1:
+	        if (zend_parse_parameters(1, "z", &zInput) == FAILURE) {
+	            WRONG_PARAM_COUNT;
+	        }
+	        break;
+	    case 2:
+	        if (zend_parse_parameters(2, "zz", &zInput, &zFlags) == FAILURE) {
+	            WRONG_PARAM_COUNT;
+	        }
+	        convert_to_long_ex(zFlags);
+	        flags = (int)Z_LVAL_P(zFlags);
+	        break;
+	    default:
+	        if (zend_parse_parameters((ZEND_NUM_ARGS() > 3 ? 4 : 3), "zzz|f", &zInput, &zFlags, &zOffset, &(var_hash.fci), &(var_hash.fci_cache)) == FAILURE) {
+	            WRONG_PARAM_COUNT;
+	        }
+	        convert_to_long_ex(zFlags);
+	        convert_to_long_ex(zOffset);
+	        flags = (int)Z_LVAL_P(zFlags);
+	        offset = (int)Z_LVAL_P(zOffset);
+	        break;
     }
     var_hash.flags = flags;
 
