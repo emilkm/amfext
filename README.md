@@ -7,14 +7,19 @@ AMFEXT is a PHP extension that provides encoding and decoding support for AMF0 a
 
 `master` branch is now PHP7
 
-* All tests pass on Windows and Linux.
 * The tests provide reasonable coverage. All encoding/decoding tests from https://github.com/emilkm/efxphp have been used here.
+* All tests pass on
+** Dev environment Windows 10 (64 bit) - PHP 7.0.8, 7.1.1
+** Test environment Fedora Linux 25 (64 bit) - PHP 7.1.1
+** Travi CI Ubuntu Linux 14.04.5 (64 bit) - PHP 7.1.1
+* Some test fail on
+** Travis CI Ubuntu Linux trusty (64 bit) - PHP 7.0.7
 
 # PHP5
 
 For PHP5 see the `php56` branch.
 
-* Compiles and runs on Windows and Linux, but has some memory leaks outstanding.
+* Compiles and works on Windows and Linux, but has some memory leaks outstanding.
 
 # DONE
 
@@ -26,10 +31,10 @@ For PHP5 see the `php56` branch.
 * Fixed various issues from the original version.
 * Added support for Date, ByteArray, XML, XML Document, and Vector types.
 * Changed the object serialization to support traits and traits references.
+* Setup Travis CI.
 
 # TODO
 
-* Setup Travis CI
 * Remove dependency on userland callbacks.
 * Change StringBuilder to internal functionality, or object.
 * Look at changing encoding so it supports the full packet.
