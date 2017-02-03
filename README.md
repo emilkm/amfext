@@ -1,7 +1,7 @@
 amfext
 ======
 
-AMFEXT is an AMF PHP extension with encoding and decoding support for AMF0 and AMF3
+AMFEXT is a PHP extension that provides encoding and decoding support for AMF0 and AMF3
 
 # PHP7
 
