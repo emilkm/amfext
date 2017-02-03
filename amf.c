@@ -1,5 +1,5 @@
 /**
- * PHP extension for Action Message Format (AMF) encoding and decoding with support for AMF0 and AMF3
+ * PHP7 extension for Action Message Format (AMF) encoding and decoding with support for AMF0 and AMF3
  * 
  * amfext (http://emilmalinov.com/amfext)
  *
