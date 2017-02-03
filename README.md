@@ -13,7 +13,7 @@ AMFEXT is a PHP extension that provides encoding and decoding support for AMF0 a
  * Test environment Fedora Linux 25 (64 bit) - PHP 7.1.1
  * Travi CI Ubuntu Linux 14.04.5 (64 bit) - PHP 7.1.1
 * Some test fail on
- * Travis CI Ubuntu Linux trusty (64 bit) - PHP 7.0.7
+ * Travis CI Ubuntu Linux 14.04.5 (64 bit) - PHP 7.0.7
 
 # PHP5
 
