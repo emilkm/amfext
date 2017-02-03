@@ -1,16 +1,13 @@
-sudo: required
 dist: trusty
 
-language: php
-php:
-    - 7.0
-    - 7.1
+language: c
+
+env:
+    - PHP_VERSION=7.0.15
+    - PHP_VERSION=7.1.1
 
 matrix:
     fast_finish: true
 
-before_script:
-    - ./.travis/travis.sh before_script
-
 script:
-    - ./.travis/travis.sh script
+    - ./.travis/travis.sh

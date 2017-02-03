@@ -1,43 +1,29 @@
 #!/bin/bash
 
-function build_extension() {
-    phpize
-    ./configure
-    make
-    make install
-}
+# PHP Settings
+PHP_BASE="php-$PHP_VERSION"
+PHP_PACKAGE="php-$PHP_VERSION.tar.gz"
+PHP_URL="http://us1.php.net/get/$PHP_PACKAGE/from/this/mirror"
 
-function run_tests() {
-    export NO_INTERACTION=1
-    export REPORT_EXIT_STATUS=1
-    export TEST_PHP_EXECUTABLE=$(which php)
+# Move out of project 
+cd ../
 
-    php run-tests.php --show-diff -d extension=modules/amf.so -n ./tests/*.phpt
-    retval=$?
-    
-    return $retval;
-}
+# Get and extract PHP
+wget $PHP_URL -O $PHP_PACKAGE
+tar -xf $PHP_PACKAGE 
+cd $PHP_BASE 
 
-# Command line arguments
-ACTION=$1
+# Clone into ext directory
+mv ../amfext ext/amf
 
-set -e
+# Build PHP
+./buildconf --force
+./configure --enable-debug --disable-all --enable-libxml --enable-simplexml --enable-dom --with-amf
+make
 
-case $ACTION in
-    before_script)
-        # Build the extension
-        build_extension
-    ;;
-
-    script)
-        # Run tests
-        set +e
-        run_tests || exit 1
-    ;;
-
-    *)
-        echo "Unknown action. Valid actions are: before_script and script"
-        exit 1
-    ;;
-esac
+# Run tests
+export REPORT_EXIT_STATUS=1
+export TEST_PHP_EXECUTABLE=sapi/cli/php
+export NO_INTERACTION=1
+sapi/cli/php run-tests.php ext/amf  
 
