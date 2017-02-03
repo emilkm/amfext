@@ -1,12 +1,10 @@
 #!/bin/bash
 
 function build_extension() {
-    pushd amfext
-        phpize
-        ./configure
-        make
-        make install
-    popd
+    phpize
+    ./configure
+    make
+    make install
 }
 
 function run_tests() {
@@ -14,10 +12,9 @@ function run_tests() {
     export REPORT_EXIT_STATUS=1
     export TEST_PHP_EXECUTABLE=$(which php)
 
-    pushd amfext
-        php run-tests.php --show-diff -d extension=modules/amf.so -n ./tests/*.phpt
-        retval=$?
-    popd
+    php run-tests.php --show-diff -d extension=modules/amf.so -n ./tests/*.phpt
+    retval=$?
+    
     return $retval;
 }
 
