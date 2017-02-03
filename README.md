@@ -1,9 +1,9 @@
 amfext
-=====
+======
 
 AMFEXT is an AMF PHP extension with encoding and decoding support for AMF0 and AMF3
 
-## PHP7
+# PHP7
 
 `master` branch is now PHP7
 
@@ -34,6 +34,7 @@ For PHP5 see the `php56` branch.
 * Change StringBuilder to internal functionality, or object.
 * Look at changing encoding so it supports the full packet.
 * Write docs.
+* ...
 
 
 
