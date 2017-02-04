@@ -31,7 +31,7 @@ build_script:
 
     buildconf.bat
 
-    configure.bat --enable-debug --disable-zts --with-amf --with-prefix=C:\projects\amfext\bin --with-php-build=deps
+    configure.bat --enable-debug --disable-zts --disable-cgi --disable-com-dotnet --without-mysqlnd --with-amf --with-prefix=C:\projects\amfext\bin --with-php-build=deps
 
     nmake
 
@@ -45,7 +45,7 @@ build_script:
 
     C:\projects\amfext\bin\php.exe -m
 test_script:
-- cmd: C:\projects\amf\bin\php.exe -doutput_buffering=0 run-tests.php ext\amf -p C:\projects\amf\bin\php.exe -q
+- cmd: C:\projects\amfext\bin\php.exe -doutput_buffering=0 run-tests.php ext\amf -p C:\projects\amfext\bin\php.exe -q
 artifacts:
   - path: bin
     name: master
