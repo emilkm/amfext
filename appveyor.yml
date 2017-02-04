@@ -31,7 +31,7 @@ build_script:
 
     buildconf.bat
 
-    configure.bat --enable-debug --enable-cli --disable-zts --disable-all -enable-xml --enable-xml-lib --enable-dom  --with-prefix=C:\projects\amfext\bin --with-php-build=deps
+    configure.bat --enable-debug --enable-cli --disable-zts --disable-all --enable-xml-lib --enable-dom  --with-prefix=C:\projects\amfext\bin --with-php-build=deps
 
     nmake
 
