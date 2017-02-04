@@ -8,6 +8,7 @@ AMFEXT is a PHP extension that provides encoding and decoding support for AMF0 a
 `master` branch is now PHP7
 
 * The tests provide reasonable coverage. All encoding/decoding tests from https://github.com/emilkm/efxphp have been used here.
+
 [![Build Status](https://travis-ci.org/emilkm/amfext.svg?branch=master)](https://travis-ci.org/emilkm/amfext)
 
 # PHP5
