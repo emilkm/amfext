@@ -25,7 +25,7 @@ build_script:
 
     wget http://windows.php.net/downloads/php-sdk/deps-7.1-vc14-x64.7z
 
-    7z x -y deps-7.1-vc14-x64.7z -o C:\projects\php-src
+    7z x -y deps-7.1-vc14-x64.7z -oC:\projects\php-src
 
     cd C:\projects\php-src
 
