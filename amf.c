@@ -1548,7 +1548,7 @@ static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *ht,
     }
 
     if (isDynamic == 0) {
-        ZEND_HASH_FOREACH_STR_KEY_VAL(ht, key, val) {
+        ZEND_HASH_FOREACH_STR_KEY_VAL_IND(ht, key, val) {
             // Don't write private/protected properties or explicit type
             if (&key[0] == 0 || strcmp(ZSTR_VAL(key), "_explicitType") == 0) {
                 continue;
@@ -1557,7 +1557,7 @@ static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *ht,
         } ZEND_HASH_FOREACH_END();
     }
     else {
-        ZEND_HASH_FOREACH_STR_KEY_VAL(ht, key, val) {
+        ZEND_HASH_FOREACH_STR_KEY_VAL_IND(ht, key, val) {
             // Don't write private/protected properties or explicit type
             if (&key[0] == 0 || strcmp(ZSTR_VAL(key), "_explicitType") == 0) {
                 continue;
@@ -1708,7 +1708,7 @@ static void amf0_serialize_var(amf_serialize_output buf, zval *val, amf_context_
             amf_write_double(buf, (double)Z_LVAL_P(val), var_hash);
             return;
         case IS_DOUBLE:
-            if (Z_DVAL_P(val) > INT_MAX) {
+            if (Z_DVAL_P(val) > AMF_U32_MAX) {
                 convert_to_string(val);
                 amf_write_byte(buf, AMF0_STRING);
                 amf0_write_short(buf, (int)Z_STRLEN_P(val));
@@ -2001,7 +2001,7 @@ static void amf0_serialize_object_data(amf_serialize_output buf, HashTable *ht, 
     zend_string *key;
     zval *val;
 
-    ZEND_HASH_FOREACH_KEY_VAL(ht, hdx, key, val) {
+    ZEND_HASH_FOREACH_KEY_VAL_IND(ht, hdx, key, val) {
         if (key == NULL) {
             char str[32];
             sprintf(str, "%d", hdx);

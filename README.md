@@ -29,6 +29,7 @@ For PHP5 see the `php56` branch.
 * Added support for Date, ByteArray, XML, XML Document, and Vector types.
 * Changed the object serialization to support traits and traits references.
 * Setup Travis CI.
+* Setup AppVeyor.
 
 # TODO
 
