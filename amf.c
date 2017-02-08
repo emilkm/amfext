@@ -23,10 +23,9 @@
 #include "ext/standard/php_smart_str.h"
 #include "ext/standard/basic_functions.h"
 #include "ext/standard/php_incomplete_class.h"
-#include "php_amf.h"
-#include "php_memory_streams.h"
 #include "ext/standard/info.h"
-#include "stdlib.h"
+#include "php_memory_streams.h"
+#include "php_amf.h"
 
 /*  module Declarations {{{1*/
 
@@ -555,13 +554,13 @@ static void amf_sederialize_ctor(amf_serialize_data_t *x, int is_serialize, zval
     zend_hash_init(&(x->objtypes), 10, NULL, NULL, 0);
 
     /* deserializer stores zval of strings for AMF */
-    zend_hash_init(&(x->strings), 10, NULL, is_serialize ? NULL : amf_zval_dtor, 0);
+    zend_hash_init(&(x->strings), 10, NULL, is_serialize ? NULL : ZVAL_PTR_DTOR, 0);
     x->nextObject0Index = 0;
     x->nextObjectIndex = 0;
     x->nextTraitIndex = 0;
     x->nextStringIndex = 0;
     /* deserializer stores a hash for each class, while serializer is a long */
-    zend_hash_init(&(x->traits), 10, NULL, is_serialize ? NULL : amf_zval_dtor, 0);
+    zend_hash_init(&(x->traits), 10, NULL, ZVAL_PTR_DTOR, 0);
 }
 
 static void amf_sederialize_dtor(amf_serialize_data_t *x)
@@ -3014,6 +3013,7 @@ static int amf0_read_objectdata(zval **rval, const unsigned char **p, const unsi
             }
         } else if (Z_STRLEN_P(zName) > 0) {
             add_property_zval(*rval, Z_STRVAL_P(zName), zValue);
+			zval_ptr_dtor(&zValue);
         } else {
             php_error_docref(NULL TSRMLS_CC, E_NOTICE, "amf cannot set empty \"\" property for an object. Use AMF_OBJECT_AS_ASSOC flag");
         }
@@ -3093,10 +3093,7 @@ static int amf3_deserialize_var(zval **rval, const unsigned char **p, const unsi
             handle = amf3_read_uint29(p, max, var_hash);
             if ((handle & AMF_INLINE_ENTITY) != 0) {
                 double d = amf_read_double(p, max, var_hash);
-                zval *newval = NULL;
-                MAKE_STD_ZVAL(newval);
-                ZVAL_DOUBLE(newval, d);
-                *rval = newval;
+                ZVAL_DOUBLE(*rval, d);
                 amf_perform_deserialize_callback(AMFE_POST_DATE, *rval, rval, 1, var_hash TSRMLS_CC);
                 amf_put_in_cache(&(var_hash->objects), *rval);
             } else {
@@ -3311,6 +3308,7 @@ static int amf3_deserialize_var(zval **rval, const unsigned char **p, const unsi
                             add_assoc_zval(*rval, Z_STRVAL_PP(pzName), zValue);
                         } else {
                             add_property_zval(*rval, Z_STRVAL_PP(pzName), zValue);  /* pass zValue */
+							zval_ptr_dtor(&zValue);
                         }
                     }
 
@@ -3336,6 +3334,7 @@ static int amf3_deserialize_var(zval **rval, const unsigned char **p, const unsi
                                 add_assoc_zval(*rval, Z_STRVAL_P(zKey), zValue);
                             } else {
                                 add_property_zval(*rval, Z_STRVAL_P(zKey), zValue);
+								zval_ptr_dtor(&zValue);
                             }
                         }
                     }
@@ -3549,10 +3548,7 @@ static int amf0_deserialize_var(zval **rval, const unsigned char **p, const unsi
         case AMF0_DATE: {
                 double d = amf_read_double(p, max, var_hash);
                 int tz = amf_read_short(p, max, var_hash);
-                zval *newval = NULL;
-                MAKE_STD_ZVAL(newval);
-                ZVAL_DOUBLE(newval, d);
-                *rval = newval;
+				ZVAL_DOUBLE(*rval, d);
                 amf_perform_deserialize_callback(AMFE_POST_DATE, *rval, rval, 0, var_hash TSRMLS_CC);
             }
             break;
