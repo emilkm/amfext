@@ -17,6 +17,7 @@ $decoder->setUseInternalDateType(true);
 $obj = $decoder->run();
 var_dump($obj->value1);
 var_dump($obj->value2);
+$decoder->pos = 0;
 $decoder->setUseInternalDateType(false);
 $obj = $decoder->run();
 var_dump($obj->value1);
