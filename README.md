@@ -18,6 +18,8 @@ For PHP5 see the `php56` branch.
 
 * Compiles and works on Windows and Linux, but has some memory leaks outstanding.
 
+* No plans to work on it going forward.
+
 # DONE
 
 * Works well with https://github.com/emilkm/efxphp

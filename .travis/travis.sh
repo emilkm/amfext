@@ -18,7 +18,7 @@ mv ../amfext ext/amf
 
 # Build PHP
 ./buildconf --force
-./configure --enable-debug --disable-all --enable-libxml --enable-simplexml --enable-dom --with-amf
+./configure --enable-debug --disable-all --enable-libxml --enable-simplexml --enable-dom --enable-amf
 make
 
 # Run tests

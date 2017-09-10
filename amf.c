@@ -25,10 +25,17 @@
 #include "zend_smart_str.h"
 #include "php_amf.h"
 
+ZEND_BEGIN_ARG_INFO_EX(arginfo_amf_decode, 0, 0, 1)
+    ZEND_ARG_INFO(0, data)
+    ZEND_ARG_INFO(1, decode_flags)
+    ZEND_ARG_INFO(1, position)
+    ZEND_ARG_INFO(0, decode_callback)
+ZEND_END_ARG_INFO()
+
 static zend_function_entry amf_functions[] = 
 {
     PHP_FE(amf_encode, NULL)
-    PHP_FE(amf_decode, NULL)
+    PHP_FE(amf_decode, arginfo_amf_decode)
     {NULL, NULL, NULL}
 };
 
@@ -614,7 +621,8 @@ static void amf_context_dtor(amf_context_data_t *var_hash)
 }
 
 /** return the i-th element from the array */
-static inline zend_long amf_get_index_long(HashTable *ht, zend_ulong idx, int def) {
+static inline zend_long amf_get_index_long(HashTable *ht, zend_ulong idx, int def) 
+{
     zval *var;
     if ((var = zend_hash_index_find(ht, idx)) != NULL && Z_TYPE_P(var) == IS_LONG) {
         return (int)Z_LVAL_P(var);
@@ -3070,7 +3078,7 @@ PHP_FUNCTION(amf_decode)
 	        flags = (int)Z_LVAL_P(zFlags);
 	        break;
 	    default:
-	        if (zend_parse_parameters((ZEND_NUM_ARGS() > 3 ? 4 : 3), "zzz|f", &zInput, &zFlags, &zOffset, &(var_hash.fci), &(var_hash.fci_cache)) == FAILURE) {
+	        if (zend_parse_parameters((ZEND_NUM_ARGS() > 3 ? 4 : 3), "zzz/|f", &zInput, &zFlags, &zOffset, &(var_hash.fci), &(var_hash.fci_cache)) == FAILURE) {
 	            WRONG_PARAM_COUNT;
 	        }
 	        convert_to_long_ex(zFlags);
@@ -3096,9 +3104,11 @@ PHP_FUNCTION(amf_decode)
             RETURN_FALSE;
         }
         if (zFlags != NULL) {
+            zval_dtor(zFlags);
             ZVAL_LONG(zFlags, var_hash.flags);
         }
         if (zOffset != NULL) {
+            zval_dtor(zOffset);
             ZVAL_LONG(zOffset, offset + p - p0);
         }
         amf_DESERIALIZE_DTOR(var_hash);

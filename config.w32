@@ -1,7 +1,7 @@
 // $Id: config.w32
 // vim:ft=javascript
 
-ARG_WITH("amf", "AMF Object Serialization support", "no");
+ARG_ENABLE("amf", "AMF Serialization support", "no");
 
  if (PHP_AMF != "no") {
 	EXTENSION('amf', 'amf.c');

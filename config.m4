@@ -62,11 +62,11 @@ dnl
 dnl Main config
 dnl
 
-PHP_ARG_WITH(amf, whether to enable AMF Serialization support,
-[  --with-amf       Enable AMF Object Serialization support])
+PHP_ARG_ENABLE(amf, whether to enable AMF Serialization support,
+[  --enable-amf       Enable AMF Serialization support])
 
 if test "$PHP_AMF" != "no"; then  
-  AC_DEFINE([HAVE_AMF],1,[whether to have AMF Object Serialization support])
+  AC_DEFINE([HAVE_AMF],1,[whether to have AMF Serialization support])
   AC_HEADER_STDC
 
   PHP_AMF_ADD_BASE_SOURCES([amf.c])

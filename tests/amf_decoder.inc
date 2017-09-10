@@ -68,7 +68,7 @@ class AmfDecoder
     /**
      * @var int
      */
-    protected $pos;
+    public $pos;
 
     /**
      *
