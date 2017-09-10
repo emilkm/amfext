@@ -1,3 +1,4 @@
+os: Previous Visual Studio 2015
 version: '{branch}.{build}'
 branches:
   only:
