@@ -391,7 +391,7 @@ static void amf_serialize_output_append_sb(amf_serialize_output buf, amf_seriali
         } while (cur != head);
     }
     else {
-        // TODO: possibly memory waste in last chunk
+        /* TODO: possibly memory waste in last chunk */
         amf_string_part *dhead, *dlast;
 
         amf_serialize_output_close_part(buf);
@@ -402,13 +402,13 @@ static void amf_serialize_output_append_sb(amf_serialize_output buf, amf_seriali
         buf->parts += inbuf->parts;
         buf->total_allocated += buf->total_allocated;
         buf->data = inbuf->data;
-        dlast->next = head;      // after the last of dst, there is head of sr
-        last->next = dhead;      // after the last of src, there is head of ds
+        dlast->next = head;      /* after the last of dst, there is head of sr */
+        last->next = dhead;      /* after the last of src, there is head of ds */
         buf->last = last;
         buf->last_chunk = inbuf->last_chunk;
         buf->left_in_part = inbuf->left_in_part;
 
-        amf_serialize_output_ctor(inbuf); // cleanup
+        amf_serialize_output_ctor(inbuf); /* cleanup */
     }
 }
 
@@ -426,7 +426,7 @@ static void amf_serialize_output_get(amf_serialize_output buf, zval *result)
 
     amf_serialize_output_close_part(buf);
 
-    // printf("flattening length:%d parts:%d chunks:%d memory:%d\n", buf->length, buf->parts, buf->chunks, buf->total_allocated);
+    /* printf("flattening length:%d parts:%d chunks:%d memory:%d\n", buf->length, buf->parts, buf->chunks, buf->total_allocated); */
     do {
         amf_string_chunk *chunk = (amf_string_chunk *)cur->data;
         while (chunk->size != 0) {
@@ -559,13 +559,13 @@ static inline void amf_write_string_zval(amf_serialize_output buf, zval *val)
 
         amf_serialize_output_close_chunk(buf);
 
-        buf->last_chunk->size = 1;  // zval chunk
+        buf->last_chunk->size = 1;  /* zval chunk */
         buf->last_chunk->zv = val;
         Z_ADDREF_P(val);
         buf->chunks++;
         buf->left_in_part -= sizeof(amf_string_chunk);
 
-        // prepare for a raw chunk
+        /* prepare for a raw chunk */
         buf->last_chunk++;
         buf->last_chunk->size = 0;
         buf->data = buf->last_chunk->data;
@@ -595,12 +595,12 @@ static inline void amf_write_string_zval(amf_serialize_output buf, zval *val)
 typedef struct {
     zend_fcall_info fci;
     zend_fcall_info_cache fci_cache;
-    HashTable objects0;              // stack of objects, no reference
-    HashTable objects;               // stack of objects for AMF3, no reference
-    HashTable strings;               // stack of strings for AMF3: string key => index
-    HashTable traits;                // stack of traits for AMF3, allocated
-    HashTable objtypes0;             // stack of object types for AMF0, related to objects0
-    HashTable objtypes;              // stack of object types for AMF0, related to objects
+    HashTable objects0;              /* stack of objects, no reference */
+    HashTable objects;               /* stack of objects for AMF3, no reference */
+    HashTable strings;               /* stack of strings for AMF3: string key => index */
+    HashTable traits;                /* stack of traits for AMF3, allocated */
+    HashTable objtypes0;             /* stack of object types for AMF0, related to objects0 */
+    HashTable objtypes;              /* stack of object types for AMF0, related to objects */
     int flags;
     uint32_t next_object0_index;
     uint32_t next_object_index;
@@ -623,7 +623,7 @@ static void amf_context_ctor(amf_context_data_t *var_hash, int is_serialize)
     zend_hash_init(&(var_hash->objtypes0), 10, NULL, NULL, 0);
     zend_hash_init(&(var_hash->objtypes), 10, NULL, NULL, 0);
 
-    // deserializer stores zval of strings for AMF
+    /* deserializer stores zval of strings for AMF */
     zend_hash_init(&(var_hash->strings), 10, NULL, is_serialize ? NULL : ZVAL_PTR_DTOR, 0);
     var_hash->next_object0_index = 0;
     var_hash->next_object_index = 0;
@@ -685,7 +685,7 @@ static inline int amf_cache_object(HashTable *ht_cache, HashTable *ht_val, uint3
 {
     zend_ulong ht_idx = (zend_ulong)(zend_uintptr_t)ht_val;
 
-    // if add only bit not set, then lookup
+    /* if add only bit not set, then lookup */
     if ((action & OCA_ADD_ONLY) == 0) {
         zval *idx;
         if ((idx = zend_hash_index_find(ht_cache, ht_idx)) != NULL) {
@@ -695,7 +695,7 @@ static inline int amf_cache_object(HashTable *ht_cache, HashTable *ht_val, uint3
         }
     }
     
-    // if lookup only bit not set, then add
+    /* if lookup only bit not set, then add */
     if ((action & OCA_LOOKUP_ONLY) == 0) { 
         /* +1 because otherwise hash will think we are trying to store NULL pointer */
         if (next_index_ptr == NULL) {
@@ -703,7 +703,7 @@ static inline int amf_cache_object(HashTable *ht_cache, HashTable *ht_val, uint3
         }
         else {
             *object_index_ptr = *next_index_ptr;
-            *next_index_ptr = *next_index_ptr + 1;  // equal to the number of elements
+            *next_index_ptr = *next_index_ptr + 1;  /* equal to the number of elements */
         }
         zval zidx;
         ZVAL_LONG(&zidx, *object_index_ptr);
@@ -732,10 +732,10 @@ static int amf_cache_object_typed(amf_context_data_t *var_hash, zval *val, uint3
     }
 
     if (amf_cache_object(ht_cache, ht_val, object_index_ptr, is_amf3 == 0 ? &(var_hash->next_object0_index) : &(var_hash->next_object_index), action) == SUCCESS) {
-        // if lookup only bit not set, then add
+        /* if lookup only bit not set, then add */
         if ((action & OCA_LOOKUP_ONLY) == 0) {
             if (is_amf3 == 0) {
-                // AMF0 does not cache type info
+                /* AMF0 does not cache type info */
             }
             else {
                 zval ztype;
@@ -780,7 +780,7 @@ static void amf_write_double(amf_serialize_output buf, double val, amf_context_d
     const char *number = d.cval;
     d.dval = val;
 
-    // AMF number: b(0) double(8 bytes big endian)
+    /* AMF number: b(0) double(8 bytes big endian) */
     if ((var_hash->flags & AMF_BIGENDIAN) != 0) {
         char numberr[8] = { number[7], number[6], number[5], number[4], number[3], number[2], number[1], number[0] };
         amf_write_string(buf, numberr, 8);
@@ -829,7 +829,7 @@ static void amf3_write_vector_int(amf_serialize_output buf, int val, amf_context
     const char *number = i.cval;
     i.ival = val;
 
-    // AMF number: b(0) int(4 bytes big endian)
+    /* AMF number: b(0) int(4 bytes big endian) */
     if ((var_hash->flags & AMF_BIGENDIAN) != 0) {
         char numberr[8] = { number[3], number[2], number[1], number[0] };
         amf_write_string(buf, numberr, 4);
@@ -849,7 +849,7 @@ static void amf3_write_vector_uint(amf_serialize_output buf, uint val, amf_conte
     const char *number = i.cval;
     i.Ival = val;
 
-    // AMF number: b(0) int(4 bytes big endian)
+    /* AMF number: b(0) int(4 bytes big endian) */
     if ((var_hash->flags & AMF_BIGENDIAN) != 0) {
         char numberr[8] = { number[3], number[2], number[1], number[0] };
         amf_write_string(buf, numberr, 4);
@@ -922,7 +922,7 @@ static inline void amf3_write_emptystring(amf_serialize_output buf)
 static int amf3_write_string(amf_serialize_output buf, const char *cp, size_t len, amf_context_data_t *var_hash)
 {
     if (len == 0) {
-        amf_write_byte(buf, 1);  // inline and empty
+        amf_write_byte(buf, 1);  /* inline and empty */
         return -1;
     }
     else if (len > AMF3_UINT29_MAX) {
@@ -956,7 +956,7 @@ static int amf3_write_string_zval(amf_serialize_output buf, zval *zv, amf_contex
     size_t len = Z_STRLEN_P(zv);
 
     if (len == 0) {
-        amf_write_byte(buf, 1);  // inline and empty
+        amf_write_byte(buf, 1);  /* inline and empty */
         return -1;
     }
     else if (len > AMF3_UINT29_MAX) {
@@ -1165,7 +1165,7 @@ static void amf3_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
         return;
     }
     else {
-        //TODO: optimize writing of packed arrays, look at HT_IS_PACKED and HT_IS_WITHOUT_HOLES for detection
+        /*TODO: optimize writing of packed arrays, look at HT_IS_PACKED and HT_IS_WITHOUT_HOLES for detection */
 
         zend_ulong hdx;
         zend_string *key;
@@ -1190,7 +1190,7 @@ static void amf3_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
             dense_count = AMF3_UINT29_MAX;
         }
 
-        //Encode string, mixed, sparse, or negative index arrays as anonymous object, associative array otherwise.
+        /* Encode string, mixed, sparse, or negative index arrays as anonymous object, associative array otherwise. */
         if ((var_hash->flags & AMF3_NSND_ARRAY_AS_OBJECT) != 0 && (assoc_count > 0 || max != dense_count - 1)) {
             amf3_write_objecthead(buf, AMF_INLINE_ENTITY | AMF_INLINE_CLASS | AMF_CLASS_DYNAMIC);
             amf3_write_emptystring(buf);
@@ -1216,7 +1216,7 @@ static void amf3_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
             amf_write_byte(buf, AMF3_ARRAY);
             amf3_write_uint29(buf, ((int)dense_count << 1) | AMF_INLINE_ENTITY);
 
-            // string keys
+            /* string keys */
             if (assoc_count > 0) {
                 ZEND_HASH_FOREACH_KEY_VAL(ht, hdx, key, val) {
                     int skip = 0;
@@ -1242,10 +1242,10 @@ static void amf3_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
                 } ZEND_HASH_FOREACH_END();
             }
 
-            // place the empty string to indicate the end of key/value pairs
+            /* place the empty string to indicate the end of key/value pairs */
             amf3_write_emptystring(buf);
 
-            // now the linear data, we need to lookup the data because of the sorting
+            /* now the linear data, we need to lookup the data because of the sorting */
             if (dense_count > 0) {
                 int i;
                 for (i = 0; i < dense_count; i++) {
@@ -1269,7 +1269,7 @@ static void amf3_serialize_object(amf_serialize_output buf, zval *val, amf_conte
     int explicit_type_is_set = 0;
     zval *amfc_type, explicit_type;
 
-    // if the object is already in cache then just go for it
+    /* if the object is already in cache then just go for it */
     if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_ONLY, -1) == FAILURE) {
         if ((amfc_type = zend_hash_index_find(&(var_hash->objtypes), object_index)) != NULL) {
             amf3_write_head(buf, amfc_type, ((int)object_index << 1));
@@ -1471,7 +1471,7 @@ static void amf3_serialize_object_anonymous(amf_serialize_output buf, HashTable 
         int memberCount = 0;
         zend_ulong var_no = var_hash->next_trait_index++;
         const int isDynamic = AMF_CLASS_DYNAMIC;
-        const int isExternalizable = 0;  // AMF_CLASS_EXTERNALIZABLE
+        const int isExternalizable = 0;  /* AMF_CLASS_EXTERNALIZABLE */
 
         zend_hash_index_add_empty_element(&(var_hash->traits), var_no);
         amf3_write_objecthead(buf, memberCount << AMF_CLASS_MEMBERCOUNT_SHIFT | isExternalizable | isDynamic | AMF_INLINE_CLASS | AMF_INLINE_ENTITY);
@@ -1487,14 +1487,14 @@ static void amf3_serialize_object_anonymous(amf_serialize_output buf, HashTable 
             amf3_write_string(buf, str, len, var_hash);
         }
         else {
-            // Don't write private/protected properties or explicit type
+            /* Don't write private/protected properties or explicit type */
             if (&key[0] == 0 || strcmp(ZSTR_VAL(key), "_explicitType") == 0) {
                 continue;
             }
             amf3_write_string(buf, ZSTR_VAL(key), ZSTR_LEN(key), var_hash);
         }
 
-        // Add element even if it's not OK, since we already wrote the length of the array before
+        /* Add element even if it's not OK, since we already wrote the length of the array before */
         if (Z_TYPE_P(val) == IS_UNDEF) {
             amf_write_byte(buf, AMF0_UNDEFINED);
         }
@@ -1532,12 +1532,12 @@ static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *ht,
     zval *val, *data, ti, properties, reference;
     ulong ref;
     HashTable *htCached = NULL, *htCachedProps = NULL, *htProperties = NULL;
-    int isDynamic = 0; // AMF_CLASS_DYNAMIC
-    int isExternalizable = 0;  // AMF_CLASS_EXTERNALIZABLE
+    int isDynamic = 0; /* AMF_CLASS_DYNAMIC */
+    int isExternalizable = 0;  /* AMF_CLASS_EXTERNALIZABLE */
     int propCount = 0;
     int cleanup = 1;
 
-    // ti (traits info) is an associative array containing the reference, and an array of property names
+    /* ti (traits info) is an associative array containing the reference, and an array of property names */
     array_init(&ti);
     array_init(&properties);
 
@@ -1545,7 +1545,7 @@ static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *ht,
     htProperties = Z_ARRVAL(properties);
 
     ZEND_HASH_FOREACH_STR_KEY(ht, key) {
-        // Don't write private/protected properties or explicit type
+        /* Don't write private/protected properties or explicit type */
         if (&key[0] == 0 || strcmp(ZSTR_VAL(key), "_explicitType") == 0) {
             continue;
         }
@@ -1594,7 +1594,7 @@ static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *ht,
 
     if (isDynamic == 0) {
         ZEND_HASH_FOREACH_STR_KEY_VAL_IND(ht, key, val) {
-            // Don't write private/protected properties or explicit type
+            /* Don't write private/protected properties or explicit type */
             if (&key[0] == 0 || strcmp(ZSTR_VAL(key), "_explicitType") == 0) {
                 continue;
             }
@@ -1603,7 +1603,7 @@ static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *ht,
     }
     else {
         ZEND_HASH_FOREACH_STR_KEY_VAL_IND(ht, key, val) {
-            // Don't write private/protected properties or explicit type
+            /* Don't write private/protected properties or explicit type */
             if (&key[0] == 0 || strcmp(ZSTR_VAL(key), "_explicitType") == 0) {
                 continue;
             }
@@ -1829,7 +1829,7 @@ static void amf0_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
             return;
         }
 
-        // key with name or negative indices means mixed array
+        /* key with name or negative indices means mixed array */
         if (num_count > 0 && (str_count > 0 || has_negative)) {
             amf_write_byte(buf, AMF0_MIXEDARRAY);
             amf0_write_int(buf, num_elements);
@@ -1839,9 +1839,9 @@ static void amf0_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
             int i;
             amf_write_byte(buf, AMF0_ARRAY);
             if (max == num_count - 1) {
-                // dense array
+                /* dense array */
                 amf0_write_int(buf, (int)num_count);
-                // lookup the key, if non-existent use 0x6 undefined
+                /* lookup the key, if non-existent use 0x6 undefined */
                 for (i = 0; i < num_count; i++) {
                     if ((val = zend_hash_index_find(ht, i)) == NULL) {
                         amf_write_byte(buf, AMF0_UNDEFINED);
@@ -1852,7 +1852,7 @@ static void amf0_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
                 }
             }
             else {
-                // sparse array
+                /* sparse array */
                 amf0_write_int(buf, (int)max + 1);
                 for (i = 0; i < max + 1; i++) {
                     if ((val = zend_hash_index_find(ht, i)) == NULL) {
@@ -1864,7 +1864,7 @@ static void amf0_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
                 }
             }
         }
-        else { // string keys only
+        else { /* string keys only */
             amf_write_byte(buf, AMF0_OBJECT);
             amf0_serialize_object_data(buf, ht, 1, var_hash);
         }
@@ -1880,7 +1880,7 @@ static void amf0_serialize_object(amf_serialize_output buf, zval *val, amf_conte
     int explicit_type_is_set = 0;
     zval *tmp, explicit_type;
 
-    // if the object is already in cache then just go for it
+    /* if the object is already in cache then just go for it */
     if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_ONLY, -1) == FAILURE) {
         amf_write_byte(buf, AMF0_REFERENCE);
         amf0_write_short(buf, object_index);
@@ -1899,36 +1899,7 @@ static void amf0_serialize_object(amf_serialize_output buf, zval *val, amf_conte
         int rtype = AMFC_TYPEDOBJECT;
         zval rval;
 
-        /*
-        //TODO: remove dependency on callback and do it all in here
-        if (strcmp(class_name, "Date") == 0) {
-            zval rv;
-            zval *timestamp = zend_read_property(Z_OBJCE_P(dval), dval, "timestamp", sizeof("timestamp") - 1, 0, &rv);
-            zval *milli = zend_read_property(Z_OBJCE_P(dval), dval, "milli", sizeof("milli") - 1, 0, &rv);
-            smart_str dts = { 0 };
-            smart_str_append_long(&dts, Z_DVAL_P(timestamp));
-            smart_str_append_long(&dts, Z_DVAL_P(milli));
-            zend_long dtl = atof(ZSTR_VAL(dts.s));
-            ZVAL_DOUBLE(&rval, dtl);
-            rtype = AMFC_DATE;
-            smart_str_free(&dts);
-        }
-        else if (strcmp(class_name, "DateTime") == 0) {
-            php_date_obj *dateobj = Z_PHPDATE_P(dval);
-            int length = 0;
-            char buffer[33];
-            smart_str dts = { 0 };
-            length = slprintf(buffer, 32, "%03d", (int)floor(dateobj->time->f * 1000 + 0.5)); //same as format 'v'
-            smart_str_append_long(&dts, dateobj->time->sse);
-            smart_str_appendl(&dts, buffer, length);
-            zend_long dtl = atof(ZSTR_VAL(dts.s));
-            ZVAL_DOUBLE(&rval, dtl);
-            rtype = AMFC_DATE;
-            smart_str_free(&dts);
-        }
-        else {*/
-            rtype = amf_invoke_serialize_callback(&rval, val, var_hash);
-        //}
+        rtype = amf_invoke_serialize_callback(&rval, val, var_hash);
 
         if (Z_TYPE(rval) == IS_RESOURCE) {
             php_error_docref(NULL, E_NOTICE, "amf encoding callback. Resources should be transformed to something");
@@ -2077,7 +2048,7 @@ static void amf0_serialize_object_data(amf_serialize_output buf, HashTable *ht, 
             amf_write_string(buf, str, len);
         }
         else {
-            // Don't write protected properties or explicit type
+            /* Don't write protected properties or explicit type */
             if (is_array == 0 && (&key[0] == 0 || strcmp(ZSTR_VAL(key), "_explicitType") == 0)) {
                 continue;
             }
@@ -2085,7 +2056,7 @@ static void amf0_serialize_object_data(amf_serialize_output buf, HashTable *ht, 
             amf_write_string(buf, ZSTR_VAL(key), (int)ZSTR_LEN(key));
         }
 
-        // Add element even if it's not OK, since we already wrote the length of the array before
+        /* Add element even if it's not OK, since we already wrote the length of the array before */
         if (Z_TYPE_P(val) == IS_UNDEF) {
             amf_write_byte(buf, AMF0_UNDEFINED);
         }
@@ -2349,7 +2320,7 @@ static unsigned int amf3_read_vector_uint(const unsigned char **p, const unsigne
 /** read double in AMF0 format, eventually flipping it for bigendian */
 static double amf3_read_vector_double(const unsigned char **p, const unsigned char *max, amf_context_data_t *var_hash)
 {
-    // this structure is used to have proper double alignment
+    /* this structure is used to have proper double alignment */
     union aligned {
         double dval;
         char cval[8];
@@ -2512,7 +2483,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                         i = 0;
                     }
 
-                    // TODO: test for key as 0 and key as "
+                    /* TODO: test for key as 0 and key as " */
                     if (i != 0 && (end == NULL || *end == 0)) {
                         zend_hash_index_update(output, i, &value);
                     }
@@ -2575,7 +2546,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                     }
                     htClassDef = HASH_OF(&zClassDef);
 
-                    // extract information from classdef packed into the first element
+                    /* extract information from classdef packed into the first element */
                     handle = (int)amf_get_index_long(htClassDef, 0, 0);
                     nClassMemberCount = handle >> AMF_CLASS_MEMBERCOUNT_SHIFT;
                     bTypedObject = (handle & 1) != 0;  // special
@@ -2594,7 +2565,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                     amf3_read_string(&class_name, p, max, 1, var_hash);
                     bTypedObject = Z_STRLEN(class_name) > 0;
 
-                    // A classdef is an array containing the reference, the class_name, then list of property names
+                    /* A classdef is an array containing the reference, the class_name, then list of property names */
                     array_init_size(&zClassDef, nClassMemberCount + 2);
                     add_next_index_long(&zClassDef, (bTypedObject ? 1 : 0) | nClassMemberCount << AMF_CLASS_MEMBERCOUNT_SHIFT | iDynamicObject | iExternalizable);
                     if (add_next_index_zval(&zClassDef, &class_name) == SUCCESS) {
@@ -2619,7 +2590,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                     amf_put_in_cache(&(var_hash->traits), &zClassDef);
                 }
 
-                // callback for externalizable or class_names not null
+                /* callback for externalizable or class_names not null */
                 if (iExternalizable != 0 || (Z_TYPE(class_name) == IS_STRING && Z_STRLEN(class_name) != 0)) {
                     if ((iSuccess = amf_invoke_deserialize_callback(rval, iExternalizable != 0 ? AMFE_MAP_EXTERNALIZABLE : AMFE_MAP, &class_name, 0, var_hash)) == SUCCESS) {
                         if (Z_TYPE_P(rval) == IS_ARRAY) {
@@ -2630,7 +2601,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                         }
                         else {
                             php_error_docref(NULL, E_NOTICE, "amf3 deserialize callback must return an array or object");
-                            iSuccess = FAILURE; // nor an object or an array
+                            iSuccess = FAILURE; /* nor an object or an array */
                         }
                     }
                 }
@@ -2645,7 +2616,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                     }
                 }
                 else {
-                    // default behaviour
+                    /* default behaviour */
                     if (iSuccess == FAILURE || Z_TYPE_P(rval) == IS_NULL) {
                         if ((var_hash->flags & AMF_OBJECT_AS_ASSOC) != 0) {
                             array_init_size(rval, nClassMemberCount);
@@ -2916,7 +2887,7 @@ static int amf0_deserialize_var(zval *rval, const unsigned char **p, const unsig
             *p = cursor;
             break;
         case AMF0_OBJECT:
-            // AMF0 read object: key=value up to AMF0_ENDOBJECT
+            /* AMF0 read object: key=value up to AMF0_ENDOBJECT */
             return amf0_read_object_data(rval, p, max, NULL, 0, 0, var_hash);
         case AMF0_DATE: {
             double d = amf_read_double(p, max, var_hash);
@@ -2939,7 +2910,7 @@ static int amf0_deserialize_var(zval *rval, const unsigned char **p, const unsig
             zval_add_ref(rval);
         }   break;
         case AMF0_MIXEDARRAY: {
-            // AMF0 Mixed: I(maxindex) then key=value up to AMF0_ENDOBJECT
+            /* AMF0 Mixed: I(maxindex) then key=value up to AMF0_ENDOBJECT */
             int maxIndex = amf_read_int(p, max, var_hash);
             return amf0_read_object_data(rval, p, max, NULL, 1, maxIndex, var_hash);
         }   break;
@@ -3026,7 +2997,7 @@ static int amf0_read_object_data(zval *rval, const unsigned char **p, const unsi
             output = Z_ARRVAL_P(rval);
         }
         else if (class_name != NULL) {
-            // build the corresponding class
+            /* build the corresponding class */
             zend_class_entry *ce;
 
             if ((ce = zend_lookup_class(Z_STR_P(class_name))) == NULL) {
@@ -3067,7 +3038,7 @@ static int amf0_read_object_data(zval *rval, const unsigned char **p, const unsi
             return FAILURE;
         }
         if (as_array == 1) {
-            // try to convert the string into a number
+            /* try to convert the string into a number */
             char *end;
             char tmp[32];
             int len = (int)Z_STRLEN(key);
@@ -3081,7 +3052,7 @@ static int amf0_read_object_data(zval *rval, const unsigned char **p, const unsi
                 i = 0;
             }
 
-            // TODO test for key as 0 and key as "
+            /* TODO test for key as 0 and key as " */
             if (i != 0 && (end == NULL || *end == 0)) {
                 zend_hash_index_update(output, i, &value);
             }
