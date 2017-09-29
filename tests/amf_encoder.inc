@@ -134,7 +134,6 @@ class AmfEncoder
                 $remoteClassField = self::REMOTE_CLASS_FIELD;
                 if (isset($value->$remoteClassField)) {
                     $className = $value->$remoteClassField;
-                    unset($value->$remoteClassField);
                 } else {
                     $className = str_replace('\\', '.', $className);
                 }
