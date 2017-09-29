@@ -206,6 +206,28 @@ static void guard_memcpy(char *cp, const char *src, int k)
 #define guard_memcpy(cp, src, k) memcpy(cp, src, k)
 #endif
 
+static char *backslash_to_dot(char *src, char *dst, size_t len)
+{
+    unsigned char *s = NULL, *e = NULL;
+
+    if (!src) {
+        return (NULL);
+    }
+
+    guard_memcpy(dst, src, len);
+    s = (unsigned char *)dst;
+    e = (unsigned char *)dst + len;
+
+    while (s < e) {
+        if (*s == '\\') {
+            *s = '.';
+        }
+        s++;
+    }
+
+    return (dst);
+}
+
 static inline void amf_write_string(amf_serialize_output buf, const char *cp, size_t len);
 static inline void amf_write_string_zval(amf_serialize_output buf, zval *val);
 
@@ -1000,7 +1022,7 @@ static inline void amf3_write_objecthead(amf_serialize_output buf, int head)
 }
 
 
-static int amf_invoke_serialize_callback(zval *rval, const char **class_name, zval *arg, amf_context_data_t *var_hash)
+static int amf_invoke_serialize_callback(zval *rval, zval *arg, amf_context_data_t *var_hash)
 {
     int result, rtype = AMFC_TYPEDOBJECT;
     zval retval, params[1];
@@ -1031,12 +1053,6 @@ static int amf_invoke_serialize_callback(zval *rval, const char **class_name, zv
         if ((tmp = zend_hash_index_find(ht, 1)) != NULL) {
             convert_to_long_ex(tmp);
             rtype = (int)Z_LVAL_P(tmp);
-        }
-
-        if ((tmp = zend_hash_index_find(ht, 2)) != NULL && Z_TYPE_P(tmp) == IS_STRING) {
-            zend_string *csn = zval_get_string(tmp);
-            *class_name = ZSTR_VAL(csn);
-            zend_string_release(csn);
         }
     }
 
@@ -1248,6 +1264,7 @@ static void amf3_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
 static void amf3_serialize_object(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash)
 {
     const char *class_name = Z_TYPE_P(val) == IS_RESOURCE ? "" : ZSTR_VAL(Z_OBJCE_P(val)->name);
+    size_t class_name_len = Z_TYPE_P(val) == IS_RESOURCE ? "" : ZSTR_LEN(Z_OBJCE_P(val)->name);
     uint32_t object_index;
     int explicit_type_is_set = 0;
     zval *amfc_type, explicit_type;
@@ -1275,7 +1292,7 @@ static void amf3_serialize_object(amf_serialize_output buf, zval *val, amf_conte
         int rtype = AMFC_TYPEDOBJECT;
         zval rval;
 
-        rtype = amf_invoke_serialize_callback(&rval, &class_name, val, var_hash);
+        rtype = amf_invoke_serialize_callback(&rval, val, var_hash);
 
         if (Z_TYPE(rval) == IS_RESOURCE) {
             php_error_docref(NULL, E_NOTICE, "amf encoding callback. Resources should be transformed to something");
@@ -1306,19 +1323,39 @@ static void amf3_serialize_object(amf_serialize_output buf, zval *val, amf_conte
                     php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_OBJECT requires an object or an array");
                 }
                 break;
-            case AMFC_TYPEDOBJECT:
+            case AMFC_TYPEDOBJECT: {
+                int free_remote_class_name = 0;
+                char *remote_class_name = NULL;
+                if (explicit_type_is_set == 1 && Z_TYPE(explicit_type) == IS_STRING && Z_STRLEN(explicit_type) > 0) {
+                    remote_class_name = Z_STRVAL(explicit_type);
+                }
+                else if (memchr(class_name, '\\', class_name_len)) {
+                    free_remote_class_name = 1;
+                    remote_class_name = guard_emalloc(class_name_len);
+                    memset(remote_class_name, '\0', class_name_len);
+                    remote_class_name = backslash_to_dot(class_name, remote_class_name, class_name_len);
+                    if (remote_class_name[class_name_len] != '\0') {
+                        remote_class_name[class_name_len] = '\0';
+                    }
+                }
+                else {
+                    remote_class_name = class_name;
+                }
                 if (amf_cache_object_typed(var_hash, &rval, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_TYPEDOBJECT) == FAILURE) {
                     amf3_write_objecthead(buf, (int)object_index << 1);
                 }
                 else if (Z_TYPE(rval) == IS_OBJECT) {
-                    amf3_serialize_object_typed(buf, Z_OBJPROP(rval), class_name, var_hash);
+                    amf3_serialize_object_typed(buf, Z_OBJPROP(rval), remote_class_name, var_hash);
                 }
                 else {
                     amf_write_byte(buf, AMF3_UNDEFINED);
                     php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_TYPEDOBJECT requires an object or an array");
                 }
                 zval_ptr_dtor(&rval);
-                break;
+                if (free_remote_class_name == 1) {
+                    efree(remote_class_name);
+                }
+            }    break;
             case AMFC_ARRAY:
                 if (amf_cache_object_typed(var_hash, &rval, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_ARRAY) == FAILURE) {
                     amf3_write_objecthead(buf, (int)object_index << 1);
@@ -1838,6 +1875,7 @@ static void amf0_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
 static void amf0_serialize_object(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash)
 {
     const char *class_name = Z_TYPE_P(val) == IS_RESOURCE ? "" : ZSTR_VAL(Z_OBJCE_P(val)->name);
+    size_t class_name_len = Z_TYPE_P(val) == IS_RESOURCE ? "" : ZSTR_LEN(Z_OBJCE_P(val)->name);
     uint32_t object_index;
     int explicit_type_is_set = 0;
     zval *tmp, explicit_type;
@@ -1889,7 +1927,7 @@ static void amf0_serialize_object(amf_serialize_output buf, zval *val, amf_conte
             smart_str_free(&dts);
         }
         else {*/
-            rtype = amf_invoke_serialize_callback(&rval, &class_name, val, var_hash);
+            rtype = amf_invoke_serialize_callback(&rval, val, var_hash);
         //}
 
         if (Z_TYPE(rval) == IS_RESOURCE) {
@@ -1952,16 +1990,36 @@ static void amf0_serialize_object(amf_serialize_output buf, zval *val, amf_conte
                     amf0_write_short(buf, object_index);
                 }
                 else {
+                    int free_remote_class_name = 0;
+                    char *remote_class_name = NULL;
+                    if (explicit_type_is_set == 1 && Z_TYPE(explicit_type) == IS_STRING && Z_STRLEN(explicit_type) > 0) {
+                        remote_class_name = Z_STRVAL(explicit_type);
+                    }
+                    else if (memchr(class_name, '\\', class_name_len)) {
+                        free_remote_class_name = 1;
+                        remote_class_name = guard_emalloc(class_name_len);
+                        memset(remote_class_name, '\0', class_name_len);
+                        remote_class_name = backslash_to_dot(class_name, remote_class_name, class_name_len);
+                        if (remote_class_name[class_name_len] != '\0') {
+                            remote_class_name[class_name_len] = '\0';
+                        }
+                    }
+                    else {
+                        remote_class_name = class_name;
+                    }
                     amf_write_byte(buf, AMF0_TYPEDOBJECT);
                     if (Z_TYPE(rval) == IS_OBJECT) {
-                        amf0_write_shortstring(buf, class_name, var_hash);
+                        amf0_write_shortstring(buf, remote_class_name, var_hash);
                         amf0_serialize_object_data(buf, Z_OBJPROP(rval), 0, var_hash);
                     }
                     else {
-                        amf0_write_shortstring(buf, class_name, var_hash);
+                        amf0_write_shortstring(buf, remote_class_name, var_hash);
                         amf0_serialize_object_data(buf, Z_ARRVAL(rval), 0, var_hash);
                     }
                     zval_ptr_dtor(&rval);
+                    if (free_remote_class_name == 1) {
+                        efree(remote_class_name);
+                    }
                 }
                 break;
             case AMFC_ANY:
@@ -2555,7 +2613,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                         if (add_next_index_zval(&zClassDef, &key) == SUCCESS) {
                             Z_ADDREF(key);
                         }
-						zval_ptr_dtor(&key);
+                        zval_ptr_dtor(&key);
                     }
 
                     amf_put_in_cache(&(var_hash->traits), &zClassDef);
@@ -2629,7 +2687,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                         }
                         else {
                             add_property_zval(rval, Z_STRVAL_P(key), &value);
-							zval_ptr_dtor(&value);
+                            zval_ptr_dtor(&value);
                         }
                     }
 
@@ -3062,30 +3120,30 @@ PHP_FUNCTION(amf_decode)
     int flags = 0;
     
     switch (ZEND_NUM_ARGS()) {
-	    case 0:
-	        WRONG_PARAM_COUNT;
-	        return;
-	    case 1:
-	        if (zend_parse_parameters(1, "z", &zInput) == FAILURE) {
-	            WRONG_PARAM_COUNT;
-	        }
-	        break;
-	    case 2:
-	        if (zend_parse_parameters(2, "zz", &zInput, &zFlags) == FAILURE) {
-	            WRONG_PARAM_COUNT;
-	        }
-	        convert_to_long_ex(zFlags);
-	        flags = (int)Z_LVAL_P(zFlags);
-	        break;
-	    default:
-	        if (zend_parse_parameters((ZEND_NUM_ARGS() > 3 ? 4 : 3), "zzz/|f", &zInput, &zFlags, &zOffset, &(var_hash.fci), &(var_hash.fci_cache)) == FAILURE) {
-	            WRONG_PARAM_COUNT;
-	        }
-	        convert_to_long_ex(zFlags);
-	        convert_to_long_ex(zOffset);
-	        flags = (int)Z_LVAL_P(zFlags);
-	        offset = (int)Z_LVAL_P(zOffset);
-	        break;
+        case 0:
+            WRONG_PARAM_COUNT;
+            return;
+        case 1:
+            if (zend_parse_parameters(1, "z", &zInput) == FAILURE) {
+                WRONG_PARAM_COUNT;
+            }
+            break;
+        case 2:
+            if (zend_parse_parameters(2, "zz", &zInput, &zFlags) == FAILURE) {
+                WRONG_PARAM_COUNT;
+            }
+            convert_to_long_ex(zFlags);
+            flags = (int)Z_LVAL_P(zFlags);
+            break;
+        default:
+            if (zend_parse_parameters((ZEND_NUM_ARGS() > 3 ? 4 : 3), "zzz/|f", &zInput, &zFlags, &zOffset, &(var_hash.fci), &(var_hash.fci_cache)) == FAILURE) {
+                WRONG_PARAM_COUNT;
+            }
+            convert_to_long_ex(zFlags);
+            convert_to_long_ex(zOffset);
+            flags = (int)Z_LVAL_P(zFlags);
+            offset = (int)Z_LVAL_P(zOffset);
+            break;
     }
     var_hash.flags = flags;
 
