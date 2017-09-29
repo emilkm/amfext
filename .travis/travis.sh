@@ -3,7 +3,7 @@
 # PHP Settings
 PHP_BASE="php-$PHP_VERSION"
 PHP_PACKAGE="php-$PHP_VERSION.tar.gz"
-PHP_URL="http://us1.php.net/get/$PHP_PACKAGE/from/this/mirror"
+PHP_URL="http://php.net/get/$PHP_PACKAGE/from/this/mirror"
 
 # Move out of project 
 cd ../
