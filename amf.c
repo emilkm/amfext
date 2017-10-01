@@ -76,7 +76,7 @@ zend_module_entry amf_module_entry =
 ZEND_GET_MODULE(amf)
 #endif
 
-/* AMF enumeration {{{1*/
+/* AMF enumeration {{{ */
 
 /** AMF0 types */
 enum AMF0Codes { AMF0_NUMBER, AMF0_BOOLEAN, AMF0_STRING, AMF0_OBJECT, AMF0_MOVIECLIP, AMF0_NULL, AMF0_UNDEFINED, AMF0_REFERENCE, AMF0_MIXEDARRAY, AMF0_ENDOBJECT, AMF0_ARRAY, AMF0_DATE, AMF0_LONGSTRING, AMF0_UNSUPPORTED, AMF0_RECORDSET, AMF0_XML, AMF0_TYPEDOBJECT, AMF0_AMF3 };
@@ -102,8 +102,10 @@ enum AMF3ObjectDecl { AMF_INLINE_ENTITY = 1, AMF_INLINE_CLASS = 2, AMF_CLASS_EXT
 /** object cache actions **/
 enum ObjectCacheAction { OCA_LOOKUP_AND_ADD = 0, OCA_ADD_ONLY = 1, OCA_LOOKUP_ONLY = 2 };
 
+/* }}} */
+
+/* String Builder {{{ ********************************************************/
 /*****************************************************************************/
-/**************************** String Builder *********************************/
 /*****************************************************************************/
 
 /**
@@ -527,7 +529,7 @@ static inline void amf_write_string(amf_serialize_output buf, const char *cp, si
         if (left > len) {
             left = len;
         }
-        // printf("append raw %d of %d in buffer of %d\n", left, length, buf->last->length)
+        /* printf("append raw %d of %d in buffer of %d\n", left, length, buf->last->length) */
         guard_memcpy(buf->data, cp, left);
         cp += left;
         buf->data += left;
@@ -579,9 +581,10 @@ static inline void amf_write_string_zval(amf_serialize_output buf, zval *val)
 #endif
 }
 
+/* }}} */
 
+/* AMF {{{ *******************************************************************/
 /*****************************************************************************/
-/********************************* AMF ***************************************/
 /*****************************************************************************/
 
 #define AMF_U8_MAX 255
@@ -750,9 +753,10 @@ static int amf_cache_object_typed(amf_context_data_t *var_hash, zval *val, uint3
     }
 }
 
+/* }}} */
 
+/* Serialize {{{ *************************************************************/
 /*****************************************************************************/
-/****************************** Serialize ************************************/
 /*****************************************************************************/
 
 
@@ -1165,7 +1169,7 @@ static void amf3_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
         return;
     }
     else {
-        /*TODO: optimize writing of packed arrays, look at HT_IS_PACKED and HT_IS_WITHOUT_HOLES for detection */
+        /* TODO: optimize writing of packed arrays, look at HT_IS_PACKED and HT_IS_WITHOUT_HOLES for detection */
 
         zend_ulong hdx;
         zend_string *key;
@@ -1835,7 +1839,7 @@ static void amf0_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
             amf0_write_int(buf, num_elements);
             amf0_serialize_object_data(buf, ht, 1, var_hash);
         }
-        else if (num_count > 0) { // numeric keys only
+        else if (num_count > 0) { /* numeric keys only */
             int i;
             amf_write_byte(buf, AMF0_ARRAY);
             if (max == num_count - 1) {
@@ -2138,9 +2142,12 @@ PHP_FUNCTION(amf_encode)
     amf_SERIALIZE_DTOR(var_hash);
 }
 
+/* }}} */
 
+
+
+/* Deserialize {{{ ***********************************************************/
 /*****************************************************************************/
-/***************************** Deserialize ***********************************/
 /*****************************************************************************/
 
 /** reads short integer in AMF0 format */
@@ -2162,7 +2169,7 @@ static int amf_read_int(const unsigned char **p, const unsigned char *max, amf_c
 /** reads double in AMF0 format, eventually flipping it for bigendian */
 static double amf_read_double(const unsigned char **p, const unsigned char *max, amf_context_data_t *var_hash)
 {
-    // this structure is used to have proper double alignment
+    /* this structure is used to have proper double alignment */
     union aligned {
         double dval;
         char cval[8];
@@ -2215,7 +2222,7 @@ static int amf3_read_uint29(const unsigned char **p, const unsigned char *max, a
     just copy the sign bit into all the additional bits in the new format
     convert/sign extend the 29bit two's complement number to 32 bit
     */
-    mask = 1 << 28;  // mask
+    mask = 1 << 28;  /* mask */
     r = -(acc & mask) | acc;
     return r;
 }
@@ -2549,7 +2556,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                     /* extract information from classdef packed into the first element */
                     handle = (int)amf_get_index_long(htClassDef, 0, 0);
                     nClassMemberCount = handle >> AMF_CLASS_MEMBERCOUNT_SHIFT;
-                    bTypedObject = (handle & 1) != 0;  // special
+                    bTypedObject = (handle & 1) != 0;  /* special */
                     iExternalizable = handle & AMF_CLASS_EXTERNAL;
                     iDynamicObject = handle & AMF_CLASS_DYNAMIC;
 
@@ -3150,3 +3157,4 @@ PHP_FUNCTION(amf_decode)
     }
 }
 
+/* }}} */
