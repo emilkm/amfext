@@ -9,6 +9,7 @@ AMFEXT is a PHP extension that provides encoding and decoding support for AMF0 a
 
 * The tests provide reasonable coverage. All encoding/decoding tests from https://github.com/emilkm/efxphp have been used here.
 
+
 [![Build Status](https://travis-ci.org/emilkm/amfext.svg?branch=master)](https://travis-ci.org/emilkm/amfext)
 [![Build status](https://ci.appveyor.com/api/projects/status/om63glh4g24gi1p9/branch/master?svg=true)](https://ci.appveyor.com/project/emilkm/amfext/branch/master)
 
@@ -32,6 +33,10 @@ For PHP5 see the `php56` branch.
 * Changed the object serialization to support traits and traits references.
 * Setup Travis CI.
 * Setup AppVeyor.
+
+# DOING
+
+* Chasing a hard to replicate decoding issue. (Decoding tests/03014_decodePacketMultipleTypedObjects2.phpt fails when run in efxphp.)
 
 # TODO
 

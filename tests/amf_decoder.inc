@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/amf_messages.inc';
+
 class AmfDecoder
 {
     const REMOTE_CLASS_FIELD = '_explicitType';
@@ -56,6 +58,13 @@ class AmfDecoder
     protected $useInternalXmlDocumentType = true;
 
     /**
+     * Decode typed object or associative array.
+     *
+     * @var bool
+     */
+    protected $amfObjectAsArray = false;
+
+    /**
      * @var string The encoded data
      */
     protected $data;
@@ -75,9 +84,14 @@ class AmfDecoder
      */
     public function __construct()
     {
+        //spl_autoload_register(array($this, 'loadClass'), true, false);
         $this->bigEndianMachine = (pack('l', 1) === "\x00\x00\x00\x01");
-        $this->decodeFlags = (!$this->bigEndianMachine ? self::AMF_BIGENDIAN : 0);
     }
+
+    /*protected function __destruct()
+    {
+        spl_autoload_unregister(array($this, 'loadClass'));
+    }*/
 
     /**
      * @param string $data
@@ -120,6 +134,38 @@ class AmfDecoder
     }
 
     /**
+     * Decode typed object or associative array.
+     *
+     * @param bool $value
+     */
+    public function decodeAmfObjectAsArray($value)
+    {
+        $this->amfObjectAsArray = $value;
+    }
+
+	/**
+     * References must be reset before reading a top level object,
+     * such as a header or a body.
+     */
+    public function resetReferences()
+    {
+        $this->objects0 = array();
+        $this->strings = array();
+        $this->objects = array();
+        $this->traits = array();
+        $this->avmPlus = false;
+    }
+
+    protected function loadClass($className)
+    {
+        if (strpos($className, 'flex\\messaging\\messages\\') === 0) {
+            if (file_exists($file = __DIR__ . '\\asset\\' . $className . '.php')) {
+                require_once $file;
+            }
+        }
+    }
+
+    /**
      * Create an instance of a generic anonymous or specific typed object.
      *
      * @param string $className
@@ -131,12 +177,12 @@ class AmfDecoder
         if ($className == '' || $className == 'Object') {
             $obj = new $clazz();
         } else {
-            if ($pos = strpos($className, 'flex.messaging.messages.') === 0) {
+            /*if ($pos = strpos($className, 'flex.messaging.messages.') === 0) {
                 $class = substr($className, 24);
-                $clasx = 'emilkm\\efxphp\\Amf\\Messages\\' . $class;
-            } else {
+                $clasx = $class;
+            } else {*/
                 $clasx = str_replace('.', '\\', $className);
-            }
+            //}
             if (class_exists($clasx)) {
                 $clazz = $clasx;
             }
@@ -159,6 +205,8 @@ class AmfDecoder
      */
     public function run()
     {
+        $this->decodeFlags = ((!$this->bigEndianMachine ? self::AMF_BIGENDIAN : 0)
+            | ($this->amfObjectAsArray ? self::AMF_OBJECT_AS_ASSOC : 0));
         return amf_decode($this->data, $this->decodeFlags, $this->pos, array(&$this, 'decodeCallback'));
     }
 
@@ -229,6 +277,170 @@ class AmfDecoder
             default:
                 throw new Exception('invalid event in decode callback : ' . $event);
         }
+    }
+
+    /**
+     * @param mixed $data
+     *
+     * @return ActionMessage
+     */
+    public function readMessage(&$data)
+    {
+        $this->setData($data);
+        $version = $this->readShort();
+        $message = new ActionMessage($version);
+        // Read headers
+        $headerCount = $this->readShort();
+        for ($i = 0; $i < $headerCount; ++$i) {
+            $message->headers[] = $this->readHeader();
+        }
+        // Read bodies
+        $bodyCount = $this->readShort();
+        for ($i = 0; $i < $bodyCount; ++$i) {
+            $message->bodies[] = $this->readBody();
+        }
+        return $message;
+    }
+
+    /**
+     * Deserialize a message header
+     *
+     * @return MessageHeader
+     */
+    protected function readHeader()
+    {
+        $this->resetReferences();
+        $header = new MessageHeader();
+        $header->name = $this->readUtf();
+        $header->mustUnderstand = $this->readBoolean();
+        $this->skipBytes(4); // skip header length
+        $header->data = $this->run();
+        return $header;
+    }
+
+    /**
+     * Deserialize a message body
+     *
+     * @return MessageBody
+     */
+    protected function readBody()
+    {
+        $this->resetReferences();
+        $message = new MessageBody();
+        $message->targetURI = $this->readUtf();
+        $message->responseURI = $this->readUtf();
+        $this->skipBytes(4); // skip message length
+        $message->data = $this->run();
+        return $message;
+    }
+
+    /**
+     * @param int $n The number of bytes to skip
+     */
+    public function skipBytes($n)
+    {
+        if ($this->pos + $n > $this->length) {
+            throw new Exception('Cannot skip past the end of the data.');
+        }
+        $this->pos += $n;
+    }
+
+    /**
+     * @param int $n The number of bytes to read
+     * @return string The next $n bytes as a string
+     */
+    public function readBytes($n)
+    {
+        if ($this->pos + $n > $this->length) {
+            throw new Exception('Cannot read past the end of the data.');
+        }
+        $value = '';
+        for ($i = 0; $i < $n; $i++) {
+            $value .= $this->data[$this->pos + $i];
+        }
+        $this->pos += $n;
+        return $value;
+    }
+
+    /**
+     * Does not advance the current position
+     *
+     * @param int $n The number of bytes to add to current position (default 0)
+     * @return int The byte at the current position as an integer
+     */
+    public function peekByte($n = 0)
+    {
+        if ($this->pos + $n > $this->length) {
+            throw new Exception('Cannot read past the end of the data.');
+        }
+        return ord($this->data[$this->pos + $n]);
+    }
+
+    /**
+     * @return int The next byte as an integer
+     */
+    public function readByte()
+    {
+        if ($this->pos + 1 > $this->length) {
+            throw new Exception('Cannot read past the end of the data.');
+        }
+        return ord($this->data[$this->pos++]);
+    }
+
+    /**
+     * @return bool The next byte as a boolean
+     */
+    public function readBoolean()
+    {
+        return $this->readByte() == 1;
+    }
+
+    /**
+     * @return int The next 2 bytes as an integer
+     */
+    public function readShort()
+    {
+        if ($this->pos + 2 > $this->length) {
+            throw new Exception('Cannot read past the end of the data.');
+        }
+        return ((ord($this->data[$this->pos++]) << 8) |
+                ord($this->data[$this->pos++]));
+    }
+
+    /**
+     * @return int The next 4 bytes as an integer
+     */
+    public function readInt()
+    {
+        if ($this->pos + 4 > $this->length) {
+            throw new Exception('Cannot read past the end of the data.');
+        }
+        return ((ord($this->data[$this->pos++]) << 24) |
+                (ord($this->data[$this->pos++]) << 16) |
+                (ord($this->data[$this->pos++]) << 8) |
+                ord($this->data[$this->pos++]));
+    }
+
+    /**
+     * @return float The next 8 bytes as a float
+     */
+    public function readDouble()
+    {
+        $value = $this->readBytes(8);
+        if (!$this->bigEndianMachine) {
+            $value = strrev($value);
+        }
+        $zz = unpack('dflt', $value);
+        return $zz['flt'];
+    }
+
+    /**
+     * @return string The UTF8 Unicode string
+     */
+    public function readUtf()
+    {
+        $len = $this->readShort();
+        return $this->readBytes($len);
     }
 }
 
@@ -391,5 +603,158 @@ class Vector
                 break;
         }
         return 'A ' . ($this->fixed ? 'fixed' : 'variable') . ' Vector ' . $typestr;
+    }
+}
+
+
+/******************************************************************************/
+/*                                  AMF                                       */
+/******************************************************************************/
+
+class ActionMessage
+{
+    /**
+     * @var int
+     */
+    public $version;
+
+    /**
+     * @var array
+     */
+    public $headers;
+
+    /**
+     * @var array
+     */
+    public $bodies;
+
+    /**
+     * @param int $version
+     */
+    public function __construct($version)
+    {
+        $this->version = $version;
+        $this->bodies = array();
+    }
+
+    /**
+     * @return int The number of headers
+     */
+    public function getHeaderCount()
+    {
+        return (is_array($this->headers)) ? count($this->headers) : 0;
+    }
+
+    /**
+     * @return int The number of bodies
+     */
+    public function getBodyCount()
+    {
+        return (is_array($this->bodies)) ? count($this->bodies) : 0;
+    }
+
+    /**
+     * @param mixed $index
+     *
+     * @return MessageBody
+     */
+    public function getBody($index)
+    {
+        return $this->bodies[$index];
+    }
+
+    /*public function sessionId() {
+        foreach ($this->headers as $header) {
+            if ($header->name == 'sid') {
+                return $header->data;
+            }
+        }
+        return null;
+    }*/
+}
+
+class MessageHeader
+{
+    /**
+     * @var string
+     */
+    public $name;
+
+    /**
+     * @var bool
+     */
+    public $mustUnderstand;
+
+    /**
+     * @var mixed
+     */
+    public $data;
+
+    /**
+     * @param string $name
+     * @param bool $mustUnderstand
+     * @param mixed $data
+     */
+    public function __construct($name = '', $mustUnderstand = false, $data = null) {
+        $this->name = $name;
+        $this->mustUnderstand = (bool) $mustUnderstand;
+        $this->data = $data;
+    }
+}
+
+class MessageBody
+{
+    /**
+     * @var string
+     */
+    public $targetURI;
+
+    /**
+     * @var string
+     */
+    public $responseURI;
+
+    /**
+     * @var mixed
+     */
+    public $data;
+
+    /**
+     * Incoming: the deserializer will set all properties with values
+     * from the AMF packet. Outgoing: parameters must be provided.
+     *
+     * @param string $targetURI
+     * @param string $responseURI
+     */
+    public function __construct($targetURI = null, $responseURI = null)
+    {
+        if ($targetURI == null && $responseURI == null) {
+            return;
+        }
+
+        $this->_explicitType = 'flex.messaging.io.amf.MessageBody';
+
+        $this->targetURI = $targetURI == null ? 'null' : $targetURI;
+        $this->responseURI = $responseURI == null ? 'null' : $responseURI;
+    }
+
+    /**
+     * @return AbstractMessage
+     */
+    public function getDataAsMessage()
+    {
+        if (is_array($this->data)) {
+            $message = $this->data[0];
+        } else {
+            $message = $this->data;
+        }
+        if (!($message instanceof CommandMessage)
+            && !($message instanceof RemotingMessage)
+            && !($message instanceof AcknowledgeMessage)
+            && !($message instanceof ErrorMessage)
+        ) {
+            throw new Exception('Unsupported message type.');
+        }
+        return $message;
     }
 }
