@@ -9,7 +9,7 @@ Writes a typed Object in AMF3 format.
 <?php if (!extension_loaded('amf')) print 'skip'; ?>
 --FILE--
 <?php
-include __DIR__ . '/asset/class/VoLt32.php';
+include __DIR__ . '/asset/value/VoLt32.php';
 include 'amf_encoder.inc';
 $encoder = new AmfEncoder();
 $encoder->setAvmPlus(true);

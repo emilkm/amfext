@@ -9,7 +9,7 @@ Reads a number in AMF0 format.
 <?php if (!extension_loaded('amf')) print 'skip'; ?>
 --FILE--
 <?php
-include __DIR__ . '/asset/class/RD_LOOKUPRECORD.php';
+include __DIR__ . '/asset/value/RD_LOOKUPRECORD.php';
 include 'amf_decoder.inc';
 $decoder = new AmfDecoder();
 $data = unserialize(file_get_contents(__DIR__ . '/asset/request/packet-typed-object-multiple2.amf3'));

@@ -9,7 +9,7 @@ Reads a typed object in AMF0 format. Type comes from _explicitType field.
 <?php if (!extension_loaded('amf')) print 'skip'; ?>
 --FILE--
 <?php
-include __DIR__ . '/asset/class/VoExplicitTypeNotBlank.php';
+include __DIR__ . '/asset/value/VoExplicitTypeNotBlank.php';
 include 'amf_decoder.inc';
 $decoder = new AmfDecoder();
 $data = unserialize(file_get_contents(__DIR__ . '/asset/value/object-typed-explicit-from-field.amf0'));

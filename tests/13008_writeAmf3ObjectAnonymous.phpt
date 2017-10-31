@@ -9,7 +9,7 @@ Then a typed object and a blank _explicitType field value.
 <?php if (!extension_loaded('amf')) print 'skip'; ?>
 --FILE--
 <?php
-include __DIR__ . '/asset/class/VoExplicitTypeBlank.php';
+include __DIR__ . '/asset/value/VoExplicitTypeBlank.php';
 include 'amf_encoder.inc';
 $encoder = new AmfEncoder();
 $encoder->setAvmPlus(true);

@@ -24,7 +24,7 @@ $obj->$remoteClassField = '';
 $res = $encoder->run($obj);
 echo ($res === $data) ? 'same' : 'diff';
 //typed with blank _explicitType
-include __DIR__ . '/asset/class/VoExplicitTypeBlank.php';
+include __DIR__ . '/asset/value/VoExplicitTypeBlank.php';
 $obj = new \emilkm\tests\asset\value\VoExplicitTypeBlank();
 $res = $encoder->run($obj);
 echo ($res === $data) ? 'same' : 'diff';
