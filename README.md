@@ -7,7 +7,7 @@ AMFEXT is a PHP extension that provides encoding and decoding support for AMF0 a
 
 `master` branch is now PHP7
 
-* The tests provide reasonable coverage. All encoding/decoding tests from https://github.com/emilkm/efxphp have been used here.
+* The tests provide reasonable coverage. All encoding/decoding tests from https://github.com/emilkm/efxphp have been used here, and some added as issues were discovered.
 
 
 [![Build Status](https://travis-ci.org/emilkm/amfext.svg?branch=master)](https://travis-ci.org/emilkm/amfext)
@@ -29,20 +29,15 @@ For PHP5 see the `php56` branch.
 * Removed userland access to StringBuilder.
 * Removed transliteration support. Can look at adding it back if necessary.
 * Fixed various issues from the original version.
-* Added support for Date, ByteArray, XML, XML Document, and Vector types.
 * Changed the object serialization to support traits and traits references.
 * Setup Travis CI.
 * Setup AppVeyor.
-
-# DOING
-
-* Chasing a hard to replicate decoding issue. (Decoding tests/03014_decodePacketMultipleTypedObjects2.phpt fails when run in efxphp.)
+* Remove dependency on userland callbacks.
+* Added scripts for testing through PHP CLI Server, which helped with detecting some issues.
 
 # TODO
 
-* Remove dependency on userland callbacks.
-* Change StringBuilder to internal functionality, or object.
-* Look at changing encoding so it supports the full packet.
+* Re-add support for Date, ByteArray, XML, XML Document, and Vector types. (As support for userland callbacks was removed, these need to be done again, as they were handled in the callback.)
 * Write docs.
 * ...
 

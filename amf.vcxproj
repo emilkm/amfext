@@ -36,9 +36,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="php_amf.h" />
+    <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="amf.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="amf.rc" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{13F1FA86-5EEE-4841-AB36-20294293107C}</ProjectGuid>
@@ -47,26 +51,26 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_NTS|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_NTS|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -85,14 +89,14 @@
     <CharacterSet>NotSet</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_NTS|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -136,6 +140,9 @@
     <TargetName>php_aext</TargetName>
     <TargetExt>.dll</TargetExt>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_NTS|x64'">
+    <TargetName>php_amf</TargetName>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_NTS|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -155,13 +162,14 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>D:\PHP-SDK\7.1.1-src;D:\PHP-SDK\7.1.1-src\main;D:\PHP-SDK\7.1.1-src\Zend;D:\PHP-SDK\7.1.1-src\TSRM;amf_c;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\PHP-SDK\7.1.10-src;D:\PHP-SDK\7.1.10-src\main;D:\PHP-SDK\7.1.10-src\Zend;D:\PHP-SDK\7.1.10-src\TSRM;amf_c;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>HAVE_AMF=1;ZEND_WIN32;PHP_WIN32;ZEND_DEBUG=0;COMPILE_DL_AMF=1;WIN32;_DEBUG;_WINDOWS;_USRDLL;AMF_EXPORTS;NO_HAVE_CONFIG_H;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>D:\PHP\7.1.1-nts;D:\PHP\7.1.1-nts\dev;D:\PHP-SDK\7.1.1-src;D:\PHP-SDK\7.1.1-src\Zend;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>D:\PHP\7.1.10-nts;D:\PHP\7.1.10-nts\dev;D:\PHP-SDK\7.1.10-src;D:\PHP-SDK\7.1.10-src\Zend;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>php7.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>Debug</GenerateDebugInformation>
+      <NoEntryPoint>false</NoEntryPoint>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -169,11 +177,11 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>D:\PHP-SDK\7.1.0-src;D:\PHP-SDK\7.1.0-src\main;D:\PHP-SDK\7.1.0-src\Zend;D:\PHP-SDK\7.1.0-src\TSRM;amf_c;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\PHP-SDK\7.1.10-src;D:\PHP-SDK\7.1.10-src\main;D:\PHP-SDK\7.1.10-src\Zend;D:\PHP-SDK\7.1.10-src\TSRM;amf_c;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>HAVE_AMF=1;ZEND_WIN32;PHP_WIN32;ZEND_DEBUG=0;ZTS=1;COMPILE_DL_AMF=1;WIN32;_DEBUG;_WINDOWS;_USRDLL;AMF_EXPORTS;NO_HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>D:\PHP\7.1.1-nts\dev;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>D:\PHP\7.1.10-ts\dev;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>php7ts.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>Debug</GenerateDebugInformation>
     </Link>
@@ -211,10 +219,15 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>D:\PHP-SDK\7.1.10-src;D:\PHP-SDK\7.1.10-src\main;D:\PHP-SDK\7.1.10-src\Zend;D:\PHP-SDK\7.1.10-src\TSRM;amf_c%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>HAVE_AMF=1;ZEND_WIN32;PHP_WIN32;ZEND_DEBUG=0;COMPILE_DL_AMF=1;AMF_EXPORTS;NO_HAVE_CONFIG_H;WIN32;NDEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalLibraryDirectories>D:\PHP\7.1.10-nts;D:\PHP\7.1.10-nts\dev;D:\PHP-SDK\php-7.1.10-src\x64\main;D:\PHP-SDK\php-7.1.10-src\x64\Zend%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>php7.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <NoEntryPoint>false</NoEntryPoint>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">

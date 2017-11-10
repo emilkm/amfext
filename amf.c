@@ -25,6 +25,33 @@
 #include "zend_smart_str.h"
 #include "php_amf.h"
 
+#ifdef COMPILE_DL_AMF
+ZEND_GET_MODULE(amf)
+#endif
+
+ZEND_DECLARE_MODULE_GLOBALS(amf)
+
+static PHP_GINIT_FUNCTION(amf)
+{
+    amf_globals->user_classes = NULL;
+}
+
+static zend_string *amf_object_hash(zval *obj)
+{
+    intptr_t hash_handle, hash_handlers;
+
+    if (!AMF_G(hash_mask_init)) {
+        AMF_G(hash_mask_handle) = (intptr_t)(php_mt_rand() >> 1);
+        AMF_G(hash_mask_handlers) = (intptr_t)(php_mt_rand() >> 1);
+        AMF_G(hash_mask_init) = 1;
+    }
+
+    hash_handle = AMF_G(hash_mask_handle) ^ (intptr_t)Z_OBJ_HANDLE_P(obj);
+    hash_handlers = AMF_G(hash_mask_handlers);
+
+    return strpprintf(32, "%016zx%016zx", hash_handle, hash_handlers);
+}
+
 ZEND_BEGIN_ARG_INFO_EX(arginfo_amf_decode, 0, 0, 1)
     ZEND_ARG_INFO(0, data)
     ZEND_ARG_INFO(1, decode_flags)
@@ -71,10 +98,6 @@ zend_module_entry amf_module_entry =
     PHP_AMF_VERSION,
     STANDARD_MODULE_PROPERTIES
 };
-
-#ifdef COMPILE_DL_AMF
-ZEND_GET_MODULE(amf)
-#endif
 
 /* AMF enumeration {{{ */
 
@@ -208,29 +231,29 @@ static void guard_memcpy(char *cp, const char *src, int k)
 #define guard_memcpy(cp, src, k) memcpy(cp, src, k)
 #endif
 
-static char *backslash_to_dot(char *src, char *dst, size_t len)
+static void zend_string_chr_to_chr(zend_string *zstr, char search, char replace)
 {
     unsigned char *s = NULL, *e = NULL;
 
-    if (!src) {
-        return (NULL);
+    if (!zstr) {
+        return;
     }
 
-    guard_memcpy(dst, src, len);
-    s = (unsigned char *)dst;
-    e = (unsigned char *)dst + len;
+    s = (unsigned char *)ZSTR_VAL(zstr);
+    e = (unsigned char *)ZSTR_VAL(zstr) + ZSTR_LEN(zstr);
 
     while (s < e) {
-        if (*s == '\\') {
-            *s = '.';
+        if (*s == search) {
+            *s = replace;
         }
         s++;
     }
 
-    return (dst);
+    zend_string_forget_hash_val(zstr);
 }
 
 static inline void amf_write_string(amf_serialize_output buf, const char *cp, size_t len);
+static inline void amf_write_string_zstr(amf_serialize_output buf, zend_string *zstr);
 static inline void amf_write_string_zval(amf_serialize_output buf, zval *val);
 
 /** allocate a block containing the part header and the data */
@@ -521,7 +544,36 @@ static inline void amf_write_string(amf_serialize_output buf, const char *cp, si
 #ifndef amf_DISABLE_OUTPUT
 #ifdef amf_USE_STRING_BUILDER
     while (len > 0) {
-        zend_long left;
+        zend_ulong left;
+        if (buf->left_in_part <= 0) {
+            amf_serialize_output_part_append(buf, len > AMFPARTSIZE ? len : 0);
+        }
+        left = buf->left_in_part;
+        if (left > len) {
+            left = len;
+        }
+        /* printf("append raw %d of %d in buffer of %d\n", left, length, buf->last->length) */
+        guard_memcpy(buf->data, cp, left);
+        cp += left;
+        buf->data += left;
+        buf->left_in_part -= left;
+        buf->length += left;
+        len -= left;
+    }
+#else
+    php_stream_write(buf, cp, length);
+#endif
+#endif
+}
+
+static inline void amf_write_string_zstr(amf_serialize_output buf, zend_string *zstr)
+{
+#ifndef amf_DISABLE_OUTPUT
+#ifdef amf_USE_STRING_BUILDER
+    char *cp = ZSTR_VAL(zstr);
+    size_t len = ZSTR_LEN(zstr);
+    while (len > 0) {
+        zend_ulong left;
         if (buf->left_in_part <= 0) {
             amf_serialize_output_part_append(buf, len > AMFPARTSIZE ? len : 0);
         }
@@ -545,10 +597,10 @@ static inline void amf_write_string(amf_serialize_output buf, const char *cp, si
 
 
 /** writes a string from a zval. Provides additional optimization */
-static inline void amf_write_string_zval(amf_serialize_output buf, zval *val)
+static inline void amf_write_string_zval(amf_serialize_output buf, zval *zval)
 {
 #ifndef amf_DISABLE_OUTPUT
-    size_t len = Z_STRLEN_P(val);
+    size_t len = Z_STRLEN_P(zval);
     if (len == 0) {
         return;
     }
@@ -562,8 +614,8 @@ static inline void amf_write_string_zval(amf_serialize_output buf, zval *val)
         amf_serialize_output_close_chunk(buf);
 
         buf->last_chunk->size = 1;  /* zval chunk */
-        buf->last_chunk->zv = val;
-        Z_ADDREF_P(val);
+        buf->last_chunk->zv = zval;
+        Z_ADDREF_P(zval);
         buf->chunks++;
         buf->left_in_part -= sizeof(amf_string_chunk);
 
@@ -576,7 +628,7 @@ static inline void amf_write_string_zval(amf_serialize_output buf, zval *val)
 #endif
 #endif
     else {
-        amf_write_string(buf, Z_STRVAL_P(val), len);
+        amf_write_string(buf, Z_STRVAL_P(zval), len);
     }
 #endif
 }
@@ -602,8 +654,7 @@ typedef struct {
     HashTable objects;               /* stack of objects for AMF3, no reference */
     HashTable strings;               /* stack of strings for AMF3: string key => index */
     HashTable traits;                /* stack of traits for AMF3, allocated */
-    HashTable objtypes0;             /* stack of object types for AMF0, related to objects0 */
-    HashTable objtypes;              /* stack of object types for AMF0, related to objects */
+    HashTable objtypes;              /* stack of object types for AMF3, related to objects */
     int flags;
     uint32_t next_object0_index;
     uint32_t next_object_index;
@@ -623,16 +674,14 @@ static void amf_context_ctor(amf_context_data_t *var_hash, int is_serialize)
 {
     zend_hash_init(&(var_hash->objects0), 10, NULL, NULL, 0);
     zend_hash_init(&(var_hash->objects), 10, NULL, NULL, 0);
-    zend_hash_init(&(var_hash->objtypes0), 10, NULL, NULL, 0);
-    zend_hash_init(&(var_hash->objtypes), 10, NULL, NULL, 0);
-
-    /* deserializer stores zval of strings for AMF */
     zend_hash_init(&(var_hash->strings), 10, NULL, is_serialize ? NULL : ZVAL_PTR_DTOR, 0);
+    zend_hash_init(&(var_hash->traits), 10, NULL, ZVAL_PTR_DTOR, 0);
+    zend_hash_init(&(var_hash->objtypes), 10, NULL, NULL, 0);
+        
     var_hash->next_object0_index = 0;
     var_hash->next_object_index = 0;
-    var_hash->next_trait_index = 0;
     var_hash->next_string_index = 0;
-    zend_hash_init(&(var_hash->traits), 10, NULL, ZVAL_PTR_DTOR, 0);
+    var_hash->next_trait_index = 0;
 }
 
 static void amf_context_dtor(amf_context_data_t *var_hash)
@@ -641,7 +690,6 @@ static void amf_context_dtor(amf_context_data_t *var_hash)
     zend_hash_destroy(&(var_hash->objects));
     zend_hash_destroy(&(var_hash->strings));
     zend_hash_destroy(&(var_hash->traits));
-    zend_hash_destroy(&(var_hash->objtypes0));
     zend_hash_destroy(&(var_hash->objtypes));
 }
 
@@ -676,23 +724,32 @@ static inline int amf_put_in_cache(HashTable *ht, zval *var)
 }
 
 /**
- * places an object in the cache by using a string representation of its address
- * it is not using the direct pointer because the key is not guaranteed to be
- * sized as the pointer
- * \param object_index_ptr is the pointer to the output code
- * \param next_index_ptr is a pointer to a variable containing the nextIndex used by objects
+ * Caches objects in var_hash->objects0 for AMF0 or var_hash->objects for AMF3
+ * NOTE: amf_object_hash a copy from spl_object_hash is another hash function to use
+ * but it introduces memory leaks, I haven't had time to deal with. The zend_hash
+ * method (zend_ulong)(zend_uintptr_t) works, but needs more testing for cases when
+ * SIZEOF_SIZE_T > SIZEOF_ZEND_LONG as suggested by zend_accelerator_util_funcs.c
+ * \param object_index_ptr
+ * \param next_index_ptr
  * \param action if bit 0 is set do not lookup. If bit 1 is set do not add
  * \return FAILURE if exists
  */
-static inline int amf_cache_object(HashTable *ht_cache, HashTable *ht_val, uint32_t *object_index_ptr, uint32_t *next_index_ptr, int action)
+static inline int amf_cache_object(HashTable *ht_cache, zval *val, uint32_t *object_index_ptr, uint32_t *next_index_ptr, int action)
 {
-    zend_ulong ht_idx = (zend_ulong)(zend_uintptr_t)ht_val;
+    /* References to objects are treated as if the reference didn't exist */
+    if (Z_ISREF_P(val) && Z_TYPE_P(Z_REFVAL_P(val)) == IS_OBJECT) {
+        val = Z_REFVAL_P(val);
+    }
+
+    zend_ulong idx = (zend_ulong)(zend_uintptr_t)Z_OBJPROP_P(val);
+    //zend_string *hdx = amf_object_hash(val);
 
     /* if add only bit not set, then lookup */
     if ((action & OCA_ADD_ONLY) == 0) {
-        zval *idx;
-        if ((idx = zend_hash_index_find(ht_cache, ht_idx)) != NULL) {
-            *object_index_ptr = (uint32_t)Z_LVAL_P(idx);
+        zval *zidx;
+        if ((zidx = zend_hash_index_find(ht_cache, idx)) != NULL) {
+        //if ((zidx = zend_hash_str_find(ht_cache, ZSTR_VAL(hdx), ZSTR_LEN(hdx))) != NULL) {
+            *object_index_ptr = (uint32_t)Z_LVAL_P(zidx);
 
             return FAILURE;
         }
@@ -710,7 +767,8 @@ static inline int amf_cache_object(HashTable *ht_cache, HashTable *ht_val, uint3
         }
         zval zidx;
         ZVAL_LONG(&zidx, *object_index_ptr);
-        zend_hash_index_add(ht_cache, ht_idx, &zidx);
+        zend_hash_index_add(ht_cache, idx, &zidx);
+        //zend_hash_str_add(ht_cache, ZSTR_VAL(hdx), ZSTR_LEN(hdx), &zidx);
     }
 
     return SUCCESS;
@@ -719,22 +777,8 @@ static inline int amf_cache_object(HashTable *ht_cache, HashTable *ht_val, uint3
 static int amf_cache_object_typed(amf_context_data_t *var_hash, zval *val, uint32_t *object_index_ptr, int is_amf3, int action, int amfc_type)
 {
     HashTable *ht_cache = is_amf3 == 0 ? &(var_hash->objects0) : &(var_hash->objects);
-    HashTable *ht_val;
-    switch (Z_TYPE_P(val)) {
-        case IS_OBJECT:
-            ht_val = Z_OBJPROP_P(val);
-            break;
-        case IS_ARRAY:
-            ht_val = HASH_OF(val);
-            break;
-        case IS_RESOURCE:
-            ht_val = (HashTable *)Z_LVAL_P(val);
-            break;
-        default:
-            return SUCCESS;
-    }
 
-    if (amf_cache_object(ht_cache, ht_val, object_index_ptr, is_amf3 == 0 ? &(var_hash->next_object0_index) : &(var_hash->next_object_index), action) == SUCCESS) {
+    if (amf_cache_object(ht_cache, val, object_index_ptr, is_amf3 == 0 ? &(var_hash->next_object0_index) : &(var_hash->next_object_index), action) == SUCCESS) {
         /* if lookup only bit not set, then add */
         if ((action & OCA_LOOKUP_ONLY) == 0) {
             if (is_amf3 == 0) {
@@ -877,17 +921,15 @@ static void amf0_write_emptystring(amf_serialize_output buf)
 }
 
 /** writes a short string to AMF */
-static void amf0_write_shortstring(amf_serialize_output buf, const char *cp, amf_context_data_t *var_hash)
+static void amf0_write_shortstring(amf_serialize_output buf, zend_string *zstr, amf_context_data_t *var_hash)
 {
-    size_t len = strlen(cp);
-
-    if (len > AMF_U16_MAX) {
+    if (ZSTR_LEN(zstr) > AMF_U16_MAX) {
         php_error_docref(NULL, E_NOTICE, "amf0 cannot write short strings longer than %d", AMF_U16_MAX);
         return;
     }
 
-    amf0_write_short(buf, (int)len);
-    amf_write_string(buf, cp, len);
+    amf0_write_short(buf, (int)ZSTR_LEN(zstr));
+    amf_write_string_zstr(buf, zstr);
 }
 
 
@@ -922,7 +964,7 @@ static inline void amf3_write_emptystring(amf_serialize_output buf)
     amf_write_byte(buf, 1);
 }
 
-/** writes a string from ZVAL in AMF3 format */
+/** writes a string from CHAR * in AMF3 format */
 static int amf3_write_string(amf_serialize_output buf, const char *cp, size_t len, amf_context_data_t *var_hash)
 {
     if (len == 0) {
@@ -953,23 +995,21 @@ static int amf3_write_string(amf_serialize_output buf, const char *cp, size_t le
     }
 }
 
-/** writes a string from ZVAL in AMF3 format. Useful for memory reference optimization */
-static int amf3_write_string_zval(amf_serialize_output buf, zval *zv, amf_context_data_t *var_hash)
-{
-    char *cp = Z_STRVAL_P(zv);
-    size_t len = Z_STRLEN_P(zv);
 
-    if (len == 0) {
+/** writes a string from ZSTR in AMF3 format. Useful for memory reference optimization */
+static int amf3_write_string_zstr(amf_serialize_output buf, zend_string *zs, amf_context_data_t *var_hash)
+{
+    if (ZSTR_LEN(zs) == 0) {
         amf_write_byte(buf, 1);  /* inline and empty */
         return -1;
     }
-    else if (len > AMF3_UINT29_MAX) {
+    else if (ZSTR_LEN(zs) > AMF3_UINT29_MAX) {
         php_error_docref(NULL, E_NOTICE, "amf3 cannot write strings longer than %d", AMF3_UINT29_MAX);
         return -1;
     }
     else {
         zval *val;
-        if ((val = zend_hash_str_find(&(var_hash->strings), (char *)cp, len)) != NULL) {
+        if ((val = zend_hash_find(&(var_hash->strings), zs)) != NULL) {
             amf3_write_uint29(buf, ((int)Z_LVAL_P(val) - 1) << 1);
             return (int)Z_LVAL_P(val) - 1;
         }
@@ -977,8 +1017,38 @@ static int amf3_write_string_zval(amf_serialize_output buf, zval *zv, amf_contex
             uint32_t index = ++var_hash->next_string_index;
             zval val;
             ZVAL_LONG(&val, index);
-            zend_hash_str_add(&(var_hash->strings), (char *)cp, len, &val);
-            amf3_write_uint29(buf, (((int)len << 1) | AMF_INLINE_ENTITY));
+            zend_hash_add(&(var_hash->strings), zs, &val);
+            amf3_write_uint29(buf, ((int)(ZSTR_LEN(zs) << 1) | AMF_INLINE_ENTITY));
+
+            amf_write_string_zstr(buf, zs);
+            return index - 1;
+        }
+    }
+}
+
+/** writes a string from ZVAL in AMF3 format. Useful for memory reference optimization */
+static int amf3_write_string_zval(amf_serialize_output buf, zval *zv, amf_context_data_t *var_hash)
+{
+    if (Z_STRLEN_P(zv) == 0) {
+        amf_write_byte(buf, 1);  /* inline and empty */
+        return -1;
+    }
+    else if (Z_STRLEN_P(zv) > AMF3_UINT29_MAX) {
+        php_error_docref(NULL, E_NOTICE, "amf3 cannot write strings longer than %d", AMF3_UINT29_MAX);
+        return -1;
+    }
+    else {
+        zval *val;
+        if ((val = zend_hash_find(&(var_hash->strings), Z_STR_P(zv))) != NULL) {
+            amf3_write_uint29(buf, ((int)Z_LVAL_P(val) - 1) << 1);
+            return (int)Z_LVAL_P(val) - 1;
+        }
+        else {
+            uint32_t index = ++var_hash->next_string_index;
+            zval val;
+            ZVAL_LONG(&val, index);
+            zend_hash_add(&(var_hash->strings), Z_STR_P(zv), &val);
+            amf3_write_uint29(buf, (((int)Z_STRLEN_P(zv) << 1) | AMF_INLINE_ENTITY));
 
             amf_write_string_zval(buf, zv);
             return index - 1;
@@ -1065,45 +1135,36 @@ static int amf_invoke_serialize_callback(zval *rval, zval *arg, amf_context_data
     return rtype;
 }
 
-static int amf_get_explicit_type(zval *val, zval *explicit_type)
+static zend_string *amf_get_explicit_type(zval *val)
 {
     if (Z_TYPE_P(val) != IS_OBJECT) {
-        return 0;
+        return NULL;
     }
 
     HashTable *obj = Z_OBJPROP_P(val);
-    int explicit_type_is_set = zend_hash_str_exists(obj, "_explicitType", sizeof("_explicitType") - 1);
     zval *tmp;
+    zend_string *explicit_type = NULL;
 
-    if (explicit_type_is_set == 1) {
-        if ((tmp = zend_hash_str_find(obj, "_explicitType", sizeof("_explicitType") - 1)) == NULL) {
-            ZVAL_EMPTY_STRING(explicit_type);
-        }
-        else if (Z_TYPE_P(tmp) == IS_INDIRECT) {
+    if ((tmp = zend_hash_str_find(obj, "_explicitType", sizeof("_explicitType") - 1)) != NULL) {
+        if (Z_TYPE_P(tmp) == IS_INDIRECT) {
             tmp = Z_INDIRECT_P(tmp);
             ZVAL_DEREF(tmp);
             if (Z_TYPE_P(tmp) == IS_STRING) {
-                ZVAL_COPY_VALUE(explicit_type, tmp);
-            }
-            else {
-                ZVAL_EMPTY_STRING(explicit_type);
+                explicit_type = zend_string_copy(Z_STR_P(tmp));
             }
         }
         else if (Z_TYPE_P(tmp) == IS_STRING) {
-            ZVAL_COPY_VALUE(explicit_type, tmp);
-        }
-        else {
-            ZVAL_EMPTY_STRING(explicit_type);
+            explicit_type = zend_string_copy(Z_STR_P(tmp));
         }
     }
 
-    return explicit_type_is_set;
+    return explicit_type;
 }
 
 static void amf3_serialize_array(amf_serialize_output buf, HashTable *ht, amf_context_data_t *var_hash);
 static void amf3_serialize_object(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash);
 static void amf3_serialize_object_anonymous(amf_serialize_output buf, HashTable *ht, amf_context_data_t *var_hash);
-static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *ht, const char *class_name, amf_context_data_t *var_hash);
+static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *ht, zend_string *class_name, amf_context_data_t *var_hash);
 static void amf3_serialize_vector(amf_serialize_output buf, HashTable *ht, amf_context_data_t *var_hash);
 
 static void amf3_serialize_var(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash)
@@ -1138,18 +1199,26 @@ static void amf3_serialize_var(amf_serialize_output buf, zval *val, amf_context_
             amf3_write_string_zval(buf, val, var_hash);
             return;
         case IS_RESOURCE:
+            php_error_docref(NULL, E_NOTICE, "amf PHP %d not supported\n", Z_TYPE_P(val));
+            amf_write_byte(buf, AMF3_UNDEFINED);
+            return;
         case IS_OBJECT:
             amf3_serialize_object(buf, val, var_hash);
             return;
         case IS_ARRAY: {
-            uint32_t object_index;
-            if (amf_cache_object(&(var_hash->objects), Z_ARRVAL_P(val), &object_index, &(var_hash->next_object_index), OCA_LOOKUP_AND_ADD) == FAILURE) {
+			/*Referencing is disabled in arrays for compatibility with efxphp, because
+              if the array contains only primitive values,
+              then the identity operator === will say that the two arrays are strictly equal
+              when they contain the same values, even though they maybe be distinct.*/
+			/*uint32_t object_index;
+            if (amf_cache_object(&(var_hash->objects), val, &object_index, &(var_hash->next_object_index), OCA_LOOKUP_AND_ADD) == FAILURE) {
                 amf_write_byte(buf, AMF3_ARRAY);
                 amf3_write_uint29(buf, (int)(object_index << 1));
             }
             else {
                 amf3_serialize_array(buf, Z_ARRVAL_P(val), var_hash);
-            }
+            }*/
+			amf3_serialize_array(buf, Z_ARRVAL_P(val), var_hash);
         }   return;
         default:
             php_error_docref(NULL, E_NOTICE, "amf unknown PHP type %d\n", Z_TYPE_P(val));
@@ -1161,6 +1230,8 @@ static void amf3_serialize_var(amf_serialize_output buf, zval *val, amf_context_
 /** serializes an array in AMF3 format */
 static void amf3_serialize_array(amf_serialize_output buf, HashTable *ht, amf_context_data_t *var_hash)
 {
+    var_hash->next_object_index++;
+
     int num_elements = zend_hash_num_elements(ht);
     if (num_elements == 0) {
         amf_write_byte(buf, AMF3_ARRAY);
@@ -1170,7 +1241,6 @@ static void amf3_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
     }
     else {
         /* TODO: optimize writing of packed arrays, look at HT_IS_PACKED and HT_IS_WITHOUT_HOLES for detection */
-
         zend_ulong hdx;
         zend_string *key;
         zval *val;
@@ -1203,13 +1273,13 @@ static void amf3_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
             ZEND_HASH_FOREACH_KEY_VAL(ht, hdx, key, val) {
                 if (key == NULL) {
                     char str[32];
-                    sprintf(str, "%d", hdx);
+                    sprintf(str, "%ld", hdx);
                     size_t len = strlen(str);
 
                     amf3_write_string(buf, str, len, var_hash);
                 }
                 else {
-                    amf3_write_string(buf, ZSTR_VAL(key), ZSTR_LEN(key), var_hash);
+                    amf3_write_string_zstr(buf, key, var_hash);
                 }
                 amf3_serialize_var(buf, val, var_hash);
             } ZEND_HASH_FOREACH_END();
@@ -1227,7 +1297,7 @@ static void amf3_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
                     if (key == NULL) {
                         if (hdx > ZEND_LONG_MAX || (zend_long)hdx > dense_count) {
                             char str[32];
-                            sprintf(str, "%d", hdx);
+                            sprintf(str, "%ld", hdx);
                             size_t len = strlen(str);
 
                             amf3_write_string(buf, str, len, var_hash);
@@ -1237,7 +1307,7 @@ static void amf3_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
                         }
                     }
                     else {
-                        amf3_write_string(buf, ZSTR_VAL(key), ZSTR_LEN(key), var_hash);
+                        amf3_write_string_zstr(buf, key, var_hash);
                     }
                     if (skip) {
                         continue;
@@ -1267,11 +1337,13 @@ static void amf3_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
 
 static void amf3_serialize_object(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash)
 {
-    const char *class_name = Z_TYPE_P(val) == IS_RESOURCE ? "" : ZSTR_VAL(Z_OBJCE_P(val)->name);
-    size_t class_name_len = Z_TYPE_P(val) == IS_RESOURCE ? "" : ZSTR_LEN(Z_OBJCE_P(val)->name);
-    uint32_t object_index;
-    int explicit_type_is_set = 0;
-    zval *amfc_type, explicit_type;
+    if (Z_TYPE_P(val) != IS_OBJECT) {
+        return;
+    }
+
+    uint32_t object_index = 0;
+    zval *amfc_type;
+    zend_string *explicit_type = NULL;
 
     /* if the object is already in cache then just go for it */
     if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_ONLY, -1) == FAILURE) {
@@ -1284,184 +1356,41 @@ static void amf3_serialize_object(amf_serialize_output buf, zval *val, amf_conte
         return;
     }
 
-    explicit_type_is_set = amf_get_explicit_type(val, &explicit_type);
+    explicit_type = amf_get_explicit_type(val);
 
-    if ((strcmp(class_name, "stdClass") == 0 && explicit_type_is_set == 0)
-        || (explicit_type_is_set == 1 && Z_TYPE(explicit_type) == IS_STRING && Z_STRLEN(explicit_type) == 0)
+    if ((zend_string_equals_literal(Z_OBJCE_P(val)->name, "stdClass") && explicit_type == NULL)
+        || (explicit_type != NULL && ZSTR_LEN(explicit_type) == 0)
     ) {
-        amf_cache_object(&(var_hash->objects), Z_OBJPROP_P(val), &object_index, &(var_hash->next_object_index), OCA_LOOKUP_AND_ADD);
+        amf_cache_object(&(var_hash->objects), val, &object_index, &(var_hash->next_object_index), OCA_LOOKUP_AND_ADD);
         amf3_serialize_object_anonymous(buf, Z_OBJPROP_P(val), var_hash);
     }
     else {
-        int rtype = AMFC_TYPEDOBJECT;
-        zval rval;
-
-        rtype = amf_invoke_serialize_callback(&rval, val, var_hash);
-
-        if (Z_TYPE(rval) == IS_RESOURCE) {
-            php_error_docref(NULL, E_NOTICE, "amf encoding callback. Resources should be transformed to something");
-            amf_write_byte(buf, AMF3_UNDEFINED);
-            return;
+        if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_TYPEDOBJECT) == FAILURE) {
+            amf3_write_objecthead(buf, (int)object_index << 1);
         }
-
-        switch (rtype) {
-            case AMFC_RAW:
-                if (Z_TYPE(rval) == IS_STRING) {
-                    amf_write_string_zval(buf, &rval);
-                    zval_ptr_dtor(&rval);
-                }
-                else {
-                    amf_write_byte(buf, AMF3_UNDEFINED);
-                    php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_RAW requires a string");
-                }
-                break;
-            case AMFC_OBJECT:
-                if (amf_cache_object_typed(var_hash, &rval, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_OBJECT) == FAILURE) {
-                    amf3_write_objecthead(buf, (int)object_index << 1);
-                }
-                else if (Z_TYPE(rval) == IS_OBJECT) {
-                    amf3_serialize_object_anonymous(buf, Z_OBJPROP(rval), var_hash);
-                }
-                else {
-                    amf_write_byte(buf, AMF3_UNDEFINED);
-                    php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_OBJECT requires an object or an array");
-                }
-                break;
-            case AMFC_TYPEDOBJECT: {
-                int free_remote_class_name = 0;
-                char *remote_class_name = NULL;
-                if (explicit_type_is_set == 1 && Z_TYPE(explicit_type) == IS_STRING && Z_STRLEN(explicit_type) > 0) {
-                    remote_class_name = Z_STRVAL(explicit_type);
-                }
-                else if (memchr(class_name, '\\', class_name_len)) {
-                    free_remote_class_name = 1;
-                    remote_class_name = guard_emalloc(class_name_len);
-                    memset(remote_class_name, '\0', class_name_len);
-                    remote_class_name = backslash_to_dot(class_name, remote_class_name, class_name_len);
-                    if (remote_class_name[class_name_len] != '\0') {
-                        remote_class_name[class_name_len] = '\0';
-                    }
-                }
-                else {
-                    remote_class_name = class_name;
-                }
-                if (amf_cache_object_typed(var_hash, &rval, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_TYPEDOBJECT) == FAILURE) {
-                    amf3_write_objecthead(buf, (int)object_index << 1);
-                }
-                else if (Z_TYPE(rval) == IS_OBJECT) {
-                    amf3_serialize_object_typed(buf, Z_OBJPROP(rval), remote_class_name, var_hash);
-                }
-                else {
-                    amf_write_byte(buf, AMF3_UNDEFINED);
-                    php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_TYPEDOBJECT requires an object or an array");
-                }
-                zval_ptr_dtor(&rval);
-                if (free_remote_class_name == 1) {
-                    efree(remote_class_name);
-                }
-            }    break;
-            case AMFC_ARRAY:
-                if (amf_cache_object_typed(var_hash, &rval, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_ARRAY) == FAILURE) {
-                    amf3_write_objecthead(buf, (int)object_index << 1);
-                }
-                else if (Z_TYPE(rval) == IS_ARRAY) {
-                    amf3_serialize_array(buf, Z_ARRVAL(rval), var_hash);
-                }
-                else if (Z_TYPE(rval) == IS_OBJECT) {
-                    amf3_serialize_array(buf, Z_OBJPROP(rval), var_hash);
-                }
-                else {
-                    amf_write_byte(buf, AMF3_UNDEFINED);
-                    php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_ARRAY requires an object or an array");
-                }
-                break;
-            case AMFC_DATE:
-                if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_DATE) == FAILURE) {
-                    amf_write_byte(buf, AMF3_DATE);
-                    amf3_write_uint29(buf, (int)object_index << 1);
-                }
-                else if (Z_TYPE(rval) == IS_DOUBLE) {
-                    amf_write_byte(buf, AMF3_DATE);
-                    amf3_write_uint29(buf, 1);
-                    amf_write_double(buf, Z_DVAL(rval), var_hash);
-                }
-                else {
-                    amf_write_byte(buf, AMF3_UNDEFINED);
-                    php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_DATE requires a double");
-                }
-                break;
-            case AMFC_XML:
-                if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_XML) == FAILURE) {
-                    amf_write_byte(buf, AMF3_XML);
-                    amf3_write_uint29(buf, (int)object_index << 1);
-                }
-                else if (Z_TYPE(rval) == IS_STRING) {
-                    amf_write_byte(buf, AMF3_XML);
-                    amf3_write_string_zval(buf, &rval, var_hash);
-                }
-                else {
-                    amf_write_byte(buf, AMF3_UNDEFINED);
-                    php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_XML requires a string");
-                }
-                zval_ptr_dtor(&rval);
-                break;
-            case AMFC_XMLDOCUMENT:
-                if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_XMLDOCUMENT) == FAILURE) {
-                    amf_write_byte(buf, AMF3_XMLDOCUMENT);
-                    amf3_write_uint29(buf, (int)object_index << 1);
-                }
-                else if (Z_TYPE(rval) == IS_STRING) {
-                    amf_write_byte(buf, AMF3_XMLDOCUMENT);
-                    amf3_write_string_zval(buf, &rval, var_hash);
-                }
-                else {
-                    amf_write_byte(buf, AMF3_UNDEFINED);
-                    php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_XML requires a string");
-                }
-                zval_ptr_dtor(&rval);
-                break;
-            case AMFC_BYTEARRAY:
-                if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_BYTEARRAY) == FAILURE) {
-                    amf_write_byte(buf, AMF3_BYTEARRAY);
-                    amf3_write_uint29(buf, (int)object_index << 1);
-                }
-                else if (Z_TYPE(rval) == IS_STRING) {
-                    amf_write_byte(buf, AMF3_BYTEARRAY);
-                    amf3_write_string_zval(buf, &rval, var_hash);
-                }
-                else {
-                    amf_write_byte(buf, AMF3_UNDEFINED);
-                    php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_BYTEARRAY requires a string");
-                }
-                break;
-            case AMFC_VECTOR_OBJECT:
-                if (amf_cache_object_typed(var_hash, &rval, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_VECTOR_OBJECT) == FAILURE) {
-                    amf_write_byte(buf, AMF3_VECTOR_OBJECT);
-                    amf3_write_uint29(buf, (int)object_index << 1);
-                }
-                else if (Z_TYPE(rval) == IS_ARRAY) {
-                    amf3_serialize_vector(buf, Z_ARRVAL(rval), var_hash);
-                }
-                else if (Z_TYPE(rval) == IS_OBJECT) {
-                    amf3_serialize_vector(buf, Z_OBJPROP(rval), var_hash);
-                }
-                else {
-                    amf_write_byte(buf, AMF3_UNDEFINED);
-                    php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_ARRAY requires an object or an array");
-                }
-                zval_ptr_dtor(&rval);
-                break;
-            case AMFC_ANY:
-                amf3_serialize_var(buf, &rval, var_hash);
-                break;
-            case AMFC_NONE:
-                amf_write_byte(buf, AMF3_UNDEFINED);
-                break;
-            default:
-                amf_write_byte(buf, AMF3_UNDEFINED);
-                php_error_docref(NULL, E_NOTICE, "amf encoding callback. unknown type %d", rtype);
-                break;
+        else {
+            zend_string *class_name = NULL;
+            if (explicit_type != NULL && ZSTR_LEN(explicit_type) > 0) {
+                class_name = zend_string_copy(explicit_type);
+            }
+            else if (memchr(ZSTR_VAL(Z_OBJCE_P(val)->name), '\\', ZSTR_LEN(Z_OBJCE_P(val)->name))) {
+                /* Do not use zend_string_dup as it will not dup an interned string, and you end up modifying the class name in memory */
+                class_name = zend_string_init(ZSTR_VAL(Z_OBJCE_P(val)->name), ZSTR_LEN(Z_OBJCE_P(val)->name), 0);
+                zend_string_chr_to_chr(class_name, '\\', '.');
+            }
+            else {
+                class_name = zend_string_copy(Z_OBJCE_P(val)->name);
+            }
+            amf3_serialize_object_typed(buf, Z_OBJPROP_P(val), class_name, var_hash);
+            
+            if (class_name) {
+                zend_string_release(class_name);
+            }
         }
+    }
+
+    if (explicit_type) {
+        zend_string_release(explicit_type);
     }
 }
 
@@ -1477,7 +1406,7 @@ static void amf3_serialize_object_anonymous(amf_serialize_output buf, HashTable 
         const int isDynamic = AMF_CLASS_DYNAMIC;
         const int isExternalizable = 0;  /* AMF_CLASS_EXTERNALIZABLE */
 
-        zend_hash_index_add_empty_element(&(var_hash->traits), var_no);
+        zend_hash_index_add_empty_element(&(var_hash->traits), var_no); /* Add bogus traits entry */
         amf3_write_objecthead(buf, memberCount << AMF_CLASS_MEMBERCOUNT_SHIFT | isExternalizable | isDynamic | AMF_INLINE_CLASS | AMF_INLINE_ENTITY);
         amf3_write_string(buf, "", 0, var_hash);
     }
@@ -1485,17 +1414,17 @@ static void amf3_serialize_object_anonymous(amf_serialize_output buf, HashTable 
     ZEND_HASH_FOREACH_KEY_VAL(ht, hdx, key, val) {
         if (key == NULL) {
             char str[32];
-            sprintf(str, "%d", hdx);
+            sprintf(str, "%ld", hdx);
             size_t len = strlen(str);
 
             amf3_write_string(buf, str, len, var_hash);
         }
         else {
             /* Don't write private/protected properties or explicit type */
-            if (&key[0] == 0 || strcmp(ZSTR_VAL(key), "_explicitType") == 0) {
+            if (&key[0] == 0 || zend_string_equals_literal(key, "_explicitType")) {
                 continue;
             }
-            amf3_write_string(buf, ZSTR_VAL(key), ZSTR_LEN(key), var_hash);
+            amf3_write_string_zstr(buf, key, var_hash);
         }
 
         /* Add element even if it's not OK, since we already wrote the length of the array before */
@@ -1511,7 +1440,7 @@ static void amf3_serialize_object_anonymous(amf_serialize_output buf, HashTable 
 }
 
 /** from zend_operators.c */
-static int my_hash_zval_identical_function(zval *z1, zval *z2)
+static int my_traits_hash_zval_identical_function(zval *z1, zval *z2)
 {
     zval result;
 
@@ -1529,77 +1458,81 @@ static int my_hash_zval_identical_function(zval *z1, zval *z2)
 }
 
 /** serializes a Hash Table as AMF3 plain object */
-static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *ht, const char *class_name, amf_context_data_t *var_hash)
+static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *ht, zend_string *class_name, amf_context_data_t *var_hash)
 {
-    size_t class_name_len = strlen(class_name);
+    zend_ulong hdx;
     zend_string *key;
-    zval *val, *data, ti, properties, reference;
+    zval *val, *zref, properties, reference;
     ulong ref;
-    HashTable *htCached = NULL, *htCachedProps = NULL, *htProperties = NULL;
+    HashTable *htCachedProps = NULL, *htProperties = NULL;
     int isDynamic = 0; /* AMF_CLASS_DYNAMIC */
-    int isExternalizable = 0;  /* AMF_CLASS_EXTERNALIZABLE */
+    int isExternalizable = 0; /* AMF_CLASS_EXTERNALIZABLE */
     int propCount = 0;
-    int cleanup = 1;
 
-    /* ti (traits info) is an associative array containing the reference, and an array of property names */
-    array_init(&ti);
+    /* ti (traits info) properties hash stores reference at index 0 and a list of property keys */
     array_init(&properties);
-
-    add_assoc_zval(&ti, "properties", &properties);
     htProperties = Z_ARRVAL(properties);
-
+    zend_hash_index_add_empty_element(htProperties, 0);
+    
     ZEND_HASH_FOREACH_STR_KEY(ht, key) {
         /* Don't write private/protected properties or explicit type */
-        if (&key[0] == 0 || strcmp(ZSTR_VAL(key), "_explicitType") == 0) {
+        if (&key[0] == 0 || zend_string_equals_literal(key, "_explicitType")) {
             continue;
         }
         propCount++;
-        add_assoc_null(&properties, ZSTR_VAL(key));
+        /* Do not use add_assoc_null(&properties, ZSTR_VAL(key)); because zend_symtable_str_update will ZEND_HANDLE_NUMERIC_STR and insert '123' at the numeric index 123 */
+        zval tmp;
+        ZVAL_NULL(&tmp);
+        zend_hash_str_update(htProperties, ZSTR_VAL(key), ZSTR_LEN(key), &tmp);
     } ZEND_HASH_FOREACH_END();
 
-    if ((val = zend_hash_str_find(&(var_hash->traits), class_name, class_name_len)) != NULL) {
-        htCached = Z_ARRVAL_P(val);
-        if ((data = zend_hash_str_find(htCached, "properties", sizeof("properties") - 1)) == NULL) {
+    if ((val = zend_hash_find(&(var_hash->traits), class_name)) != NULL) {
+        htCachedProps = Z_ARRVAL_P(val);
+        if ((zref = zend_hash_index_find(htCachedProps, 0)) == NULL) {
             php_error_docref(NULL, E_NOTICE, "amf traits info problem");
         }
         else {
-            htCachedProps = Z_ARRVAL_P(data);
-            if (zend_hash_compare(htCachedProps, htProperties, (compare_func_t)my_hash_zval_identical_function, 1) == 0) {
-                if ((data = zend_hash_str_find(htCached, "reference", sizeof("reference") - 1)) == NULL) {
-                    php_error_docref(NULL, E_NOTICE, "amf traits info problem");
-                }
-                else {
-                    ref = (int)Z_LVAL_P(data) << AMF_CLASS_SHIFT | AMF_INLINE_ENTITY;
-                    amf3_write_objecthead(buf, ref);
-                }
+            /* insert reference at index 0 so comparison can check the rest of the fields */
+            zend_hash_index_update(htProperties, 0, zref);
+
+            if (zend_hash_compare(htCachedProps, htProperties, (compare_func_t)my_traits_hash_zval_identical_function, 1) == 0) {
+                ref = (int)Z_LVAL_P(zref) << AMF_CLASS_SHIFT | AMF_INLINE_ENTITY;
+                amf3_write_objecthead(buf, ref);
             }
             else {
+                zend_ulong var_no = var_hash->next_trait_index++;
                 isDynamic = AMF_CLASS_DYNAMIC;
                 ref = 3 | isExternalizable | isDynamic | (0 << 4);
+                zend_hash_index_add_empty_element(&(var_hash->traits), var_no); /* Add bogus traits entry */
                 amf3_write_objecthead(buf, ref);
-                amf3_write_string(buf, class_name, class_name_len, var_hash);
+                amf3_write_string_zstr(buf, class_name, var_hash);
             }
         }
+
+        zval_ptr_dtor(&properties);
     }
     else {
-        cleanup = 0;
         ZVAL_LONG(&reference, var_hash->next_trait_index++);
-        add_assoc_zval(&ti, "reference", &reference);
-        zend_hash_str_add(&(var_hash->traits), (char *)class_name, class_name_len, &ti);
+        zend_hash_index_update(htProperties, 0, &reference);
+
+        zend_hash_add(&(var_hash->traits), class_name, &properties);
 
         ref = 3 | isExternalizable | isDynamic | (propCount << 4);
         amf3_write_objecthead(buf, ref);
-        amf3_write_string(buf, class_name, class_name_len, var_hash);
+        amf3_write_string_zstr(buf, class_name, var_hash);
 
         ZEND_HASH_FOREACH_STR_KEY(htProperties, key) {
-            amf3_write_string(buf, ZSTR_VAL(key), ZSTR_LEN(key), var_hash);
+            if (!key) {
+                continue;
+            }
+            amf3_write_string_zstr(buf, key, var_hash);
         } ZEND_HASH_FOREACH_END();
     }
 
     if (isDynamic == 0) {
         ZEND_HASH_FOREACH_STR_KEY_VAL_IND(ht, key, val) {
             /* Don't write private/protected properties or explicit type */
-            if (&key[0] == 0 || strcmp(ZSTR_VAL(key), "_explicitType") == 0) {
+            if (&key[0] == 0 || zend_string_equals_literal(key, "_explicitType")) {
                 continue;
             }
             amf3_serialize_var(buf, val, var_hash);
@@ -1608,18 +1541,14 @@ static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *ht,
     else {
         ZEND_HASH_FOREACH_STR_KEY_VAL_IND(ht, key, val) {
             /* Don't write private/protected properties or explicit type */
-            if (&key[0] == 0 || strcmp(ZSTR_VAL(key), "_explicitType") == 0) {
+            if (&key[0] == 0 || zend_string_equals_literal(key, "_explicitType")) {
                 continue;
             }
-            amf3_write_string(buf, ZSTR_VAL(key), ZSTR_LEN(key), var_hash);
+            amf3_write_string_zstr(buf, key, var_hash);
             amf3_serialize_var(buf, val, var_hash);
         } ZEND_HASH_FOREACH_END();
 
         amf3_write_emptystring(buf);
-    }
-
-    if (cleanup == 1) {
-        zval_ptr_dtor(&ti);
     }
 }
 
@@ -1703,31 +1632,28 @@ static void amf3_serialize_vector(amf_serialize_output buf, HashTable *ht, amf_c
                 amf_write_byte(buf, AMF3_UNDEFINED);
             }
             else if (hdx == 0) {
-                const char *class_name = "";
-                size_t class_name_len = 0;
-                int explicit_type_is_set = 0;
-                zval explicit_type;
+                zend_string *class_name, *explicit_type = NULL;
 
-                class_name = ZSTR_VAL(Z_OBJ_P(val)->ce->name);
-                explicit_type_is_set = amf_get_explicit_type(val, &explicit_type);
+                class_name = zend_string_dup(Z_OBJ_P(val)->ce->name, 0);
+                explicit_type = amf_get_explicit_type(val);
 
-                if ((strcmp(class_name, "stdClass") == 0 && explicit_type_is_set == 0)
-                    || (explicit_type_is_set == 1 && Z_TYPE(explicit_type) == IS_STRING && Z_STRLEN(explicit_type) == 0)
+                if ((zend_string_equals_literal(class_name, "stdClass") && explicit_type == NULL)
+                    || (explicit_type != NULL && ZSTR_LEN(explicit_type) == 0)
                 ) {
-                    class_name = "Object";
-                    class_name_len = (int)strlen(class_name);
+                    zend_string_release(class_name);
+                    class_name = zend_string_init("Object", strlen("Object"), 0);
                 }
-                else if (explicit_type_is_set == 1) {
-                    class_name = Z_STRVAL(explicit_type);
+                else if (explicit_type != NULL) {
+                    zend_string_release(class_name);
+                    class_name = zend_string_copy(explicit_type);
                 }
-                else {
-                    char *tmp = (char *)class_name;
-                    zend_string *zclass_name;
-                    zclass_name = php_str_to_str(tmp, strlen(tmp), "\\", sizeof("\\") - 1, ".", sizeof(".") - 1);
-                    class_name = ZSTR_VAL(zclass_name);
-                    class_name_len = ZSTR_LEN(zclass_name);
+                else if (memchr(ZSTR_VAL(class_name), '\\', ZSTR_LEN(class_name))) {
+                    zend_string_chr_to_chr(class_name, '\\', '.');
                 }
-                amf3_write_string(buf, class_name, (int)class_name_len, var_hash);
+                amf3_write_string_zstr(buf, class_name, var_hash);
+                zend_string_release(class_name);
+                zend_string_release(explicit_type);
+
                 amf3_serialize_object(buf, val, var_hash);
             }
             else {
@@ -1745,9 +1671,12 @@ static void amf0_serialize_var(amf_serialize_output buf, zval *val, amf_context_
 {
     switch (Z_TYPE_P(val)) {
         case IS_TRUE:
+            amf_write_byte(buf, AMF0_BOOLEAN);
+            amf_write_byte(buf, 1);
+            return;
         case IS_FALSE:
             amf_write_byte(buf, AMF0_BOOLEAN);
-            amf_write_byte(buf, Z_LVAL_P(val) ? 1 : 0);
+            amf_write_byte(buf, 0);
             return;
         case IS_NULL:
             amf_write_byte(buf, AMF0_NULL);
@@ -1776,14 +1705,19 @@ static void amf0_serialize_var(amf_serialize_output buf, zval *val, amf_context_
             amf0_serialize_object(buf, val, var_hash);
             return;
         case IS_ARRAY: {
-            uint32_t object_index;
-            if (amf_cache_object(&(var_hash->objects0), Z_ARRVAL_P(val), &object_index, &(var_hash->next_object0_index), OCA_LOOKUP_AND_ADD) == FAILURE) {
+		    /*RReferencing is disabled in arrays for compatibility with efxphp, because
+              if the array contains only primitive values,
+              then the identity operator === will say that the two arrays are strictly equal
+              when they contain the same values, even though they maybe be distinct.*/
+            /*uint32_t object_index;
+            if (amf_cache_object(&(var_hash->objects0), val, &object_index, &(var_hash->next_object0_index), OCA_LOOKUP_AND_ADD) == FAILURE) {
                 amf_write_byte(buf, AMF0_REFERENCE);
                 amf0_write_short(buf, object_index);
             }
             else {
                 amf0_serialize_array(buf, Z_ARRVAL_P(val), var_hash);
-            }
+            }*/
+			amf0_serialize_array(buf, Z_ARRVAL_P(val), var_hash);
         }    return;
         default:
             php_error_docref(NULL, E_NOTICE, "amf cannot understand php type %d", Z_TYPE_P(val));
@@ -1795,6 +1729,8 @@ static void amf0_serialize_var(amf_serialize_output buf, zval *val, amf_context_
 /** serializes an array in AMF0 format */
 static void amf0_serialize_array(amf_serialize_output buf, HashTable *ht, amf_context_data_t *var_hash)
 {
+    var_hash->next_object0_index++;
+
     int num_elements = zend_hash_num_elements(ht);
     if (num_elements == 0) {
         static char emptyArray[] = { 10,0,0,0,0 };
@@ -1878,11 +1814,12 @@ static void amf0_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
 
 static void amf0_serialize_object(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash)
 {
-    const char *class_name = Z_TYPE_P(val) == IS_RESOURCE ? "" : ZSTR_VAL(Z_OBJCE_P(val)->name);
-    size_t class_name_len = Z_TYPE_P(val) == IS_RESOURCE ? "" : ZSTR_LEN(Z_OBJCE_P(val)->name);
-    uint32_t object_index;
-    int explicit_type_is_set = 0;
-    zval *tmp, explicit_type;
+    if (Z_TYPE_P(val) != IS_OBJECT) {
+        return;
+    }
+
+    uint32_t object_index = 0;
+    zend_string *explicit_type = NULL;
 
     /* if the object is already in cache then just go for it */
     if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_ONLY, -1) == FAILURE) {
@@ -1891,148 +1828,73 @@ static void amf0_serialize_object(amf_serialize_output buf, zval *val, amf_conte
         return;
     }
 
-    explicit_type_is_set = amf_get_explicit_type(val, &explicit_type);
+    explicit_type = amf_get_explicit_type(val);
 
-    if ((strcmp(class_name, "stdClass") == 0 && explicit_type_is_set == 0)
-        || (explicit_type_is_set == 1 && Z_TYPE(explicit_type) == IS_STRING && Z_STRLEN(explicit_type) == 0)
+    if ((zend_string_equals_literal(Z_OBJCE_P(val)->name, "stdClass") && explicit_type == NULL)
+        || (explicit_type != NULL && ZSTR_LEN(explicit_type) == 0)
     ) {
         amf_write_byte(buf, AMF0_OBJECT);
         amf0_serialize_object_data(buf, Z_OBJPROP_P(val), 0, var_hash);
     }
     else {
-        int rtype = AMFC_TYPEDOBJECT;
-        zval rval;
-
-        rtype = amf_invoke_serialize_callback(&rval, val, var_hash);
-
-        if (Z_TYPE(rval) == IS_RESOURCE) {
-            php_error_docref(NULL, E_NOTICE, "amf encoding callback. Resources should be transformed to something");
-            amf_write_byte(buf, AMF0_UNDEFINED);
-            return; 
+        if (amf_cache_object_typed(var_hash, val, &object_index, 0, OCA_LOOKUP_AND_ADD, AMFC_TYPEDOBJECT) == FAILURE) {
+            amf_write_byte(buf, AMF0_REFERENCE);
+            amf0_write_short(buf, object_index);
         }
+        else {
+            zend_string *class_name = NULL;
+            if (explicit_type != NULL && ZSTR_LEN(explicit_type) > 0) {
+                class_name = zend_string_copy(explicit_type);
+            }
+            else if (memchr(ZSTR_VAL(Z_OBJCE_P(val)->name), '\\', ZSTR_LEN(Z_OBJCE_P(val)->name))) {
+                /* Do not use zend_string_dup as it will not dup an interned string, and you end up modifying the class name in memory */
+                class_name = zend_string_init(ZSTR_VAL(Z_OBJCE_P(val)->name), ZSTR_LEN(Z_OBJCE_P(val)->name), 0);
+                zend_string_chr_to_chr(class_name, '\\', '.');
+            }
+            else {
+                class_name = zend_string_copy(Z_OBJCE_P(val)->name);
+            }
+            amf_write_byte(buf, AMF0_TYPEDOBJECT);
+            if (Z_TYPE_P(val) == IS_OBJECT) {
+                amf0_write_shortstring(buf, class_name, var_hash);
+                amf0_serialize_object_data(buf, Z_OBJPROP_P(val), 0, var_hash);
+            }
 
-        switch (rtype) {
-            case AMFC_RAW:
-                amf_write_string_zval(buf, &rval);
-                zval_ptr_dtor(&rval);
-                break;
-            case AMFC_XML:
-            case AMFC_XMLDOCUMENT:
-                if (Z_STRLEN(rval) > AMF_U32_MAX) {
-                    zval_ptr_dtor(&rval);
-                    php_error_docref(NULL, E_NOTICE, "amf0 cannot write xml strings longer than %d", AMF_U32_MAX);
-                    return;
-                }
-                amf_write_byte(buf, AMF0_XML);
-                amf0_write_int(buf, (int)Z_STRLEN(rval));
-                amf_write_string_zval(buf, &rval);
-                zval_ptr_dtor(&rval);
-                break;
-            case AMFC_OBJECT:
-                if (Z_TYPE(rval) == IS_OBJECT) {
-                    if (amf_cache_object_typed(var_hash, &rval, &object_index, 0, OCA_LOOKUP_AND_ADD, AMFC_OBJECT) == FAILURE) {
-                        amf_write_byte(buf, AMF0_REFERENCE);
-                        amf0_write_short(buf, object_index);
-                    }
-                    else {
-                        amf_write_byte(buf, AMF0_OBJECT);
-                        amf0_serialize_object_data(buf, Z_OBJPROP(rval), 0, var_hash);
-                    }
-                }
-                else {
-                    amf_write_byte(buf, AMF0_NULL);
-                    php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_OBJECT requires an object");
-                }
-                break;
-            case AMFC_ARRAY:
-                if (amf_cache_object_typed(var_hash, &rval, &object_index, 0, OCA_LOOKUP_AND_ADD, AMFC_ARRAY) == FAILURE) {
-                    amf_write_byte(buf, AMF0_REFERENCE);
-                    amf0_write_short(buf, object_index);
-                }
-                else if (Z_TYPE(rval) == IS_ARRAY) {
-                    amf0_serialize_array(buf, Z_ARRVAL(rval), var_hash);
-                }
-                else if (Z_TYPE(rval) == IS_OBJECT) {
-                    amf0_serialize_array(buf, Z_OBJPROP(rval), var_hash);
-                }
-                else {
-                    php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_ARRAY requires an object or an array");
-                }
-                break;
-            case AMFC_TYPEDOBJECT:
-                if (amf_cache_object_typed(var_hash, &rval, &object_index, 0, OCA_LOOKUP_AND_ADD, AMFC_TYPEDOBJECT) == FAILURE) {
-                    amf_write_byte(buf, AMF0_REFERENCE);
-                    amf0_write_short(buf, object_index);
-                }
-                else {
-                    int free_remote_class_name = 0;
-                    char *remote_class_name = NULL;
-                    if (explicit_type_is_set == 1 && Z_TYPE(explicit_type) == IS_STRING && Z_STRLEN(explicit_type) > 0) {
-                        remote_class_name = Z_STRVAL(explicit_type);
-                    }
-                    else if (memchr(class_name, '\\', class_name_len)) {
-                        free_remote_class_name = 1;
-                        remote_class_name = guard_emalloc(class_name_len);
-                        memset(remote_class_name, '\0', class_name_len);
-                        remote_class_name = backslash_to_dot(class_name, remote_class_name, class_name_len);
-                        if (remote_class_name[class_name_len] != '\0') {
-                            remote_class_name[class_name_len] = '\0';
-                        }
-                    }
-                    else {
-                        remote_class_name = class_name;
-                    }
-                    amf_write_byte(buf, AMF0_TYPEDOBJECT);
-                    if (Z_TYPE(rval) == IS_OBJECT) {
-                        amf0_write_shortstring(buf, remote_class_name, var_hash);
-                        amf0_serialize_object_data(buf, Z_OBJPROP(rval), 0, var_hash);
-                    }
-                    else {
-                        amf0_write_shortstring(buf, remote_class_name, var_hash);
-                        amf0_serialize_object_data(buf, Z_ARRVAL(rval), 0, var_hash);
-                    }
-                    zval_ptr_dtor(&rval);
-                    if (free_remote_class_name == 1) {
-                        efree(remote_class_name);
-                    }
-                }
-                break;
-            case AMFC_ANY:
-                amf0_serialize_var(buf, &rval, var_hash);
-                break;
-            case AMFC_EXTERNAL:
-                /*amf3_write_objecthead(buf, AMF_INLINE_CLASS | AMF_INLINE_ENTITY);
-                amf3_write_string(buf, class_name, class_name_len, AMF_STRING_AS_TEXT, var_hash);
-                amf3_serialize_var(buf, rval, var_hash);*/
-                break;
-            case AMFC_NONE:
-                amf_write_byte(buf, AMF0_UNDEFINED);
-                break;
-            case AMFC_BYTEARRAY:
-                if (Z_TYPE(rval) == IS_STRING) {
-                    amf0_write_string_zval(buf, &rval, var_hash);
-                }
-                else {
-                    amf_write_byte(buf, AMF0_UNDEFINED);
-                    php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_BYTEARRAY requires a string");
-                }
-                break;
-            case AMFC_DATE:
-                if (Z_TYPE(rval) == IS_DOUBLE) {
-                    amf_write_byte(buf, AMF0_DATE);
-                    amf_write_double(buf, Z_DVAL(rval), var_hash);
-                    amf0_write_short(buf, 0);
-                }
-                else {
-                    amf_write_byte(buf, AMF0_UNDEFINED);
-                    php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_DATE requires a double");
-                }
-                break;
-            default:
-                amf_write_byte(buf, AMF0_UNDEFINED);
-                php_error_docref(NULL, E_NOTICE, "amf encoding callback. unknown type %d", rtype);
-                break;
+            /*if (strcmp(class_name, "Date") == 0) {
+                zval rv;
+                zval *timestamp = zend_read_property(Z_OBJCE_P(dval), dval, "timestamp", sizeof("timestamp") - 1, 0, &rv);
+                zval *milli = zend_read_property(Z_OBJCE_P(dval), dval, "milli", sizeof("milli") - 1, 0, &rv);
+                smart_str dts = { 0 };
+                smart_str_append_long(&dts, Z_DVAL_P(timestamp));
+                smart_str_append_long(&dts, Z_DVAL_P(milli));
+                zend_long dtl = atof(ZSTR_VAL(dts.s));
+                ZVAL_DOUBLE(&rval, dtl);
+                rtype = AMFC_DATE;
+                smart_str_free(&dts);
+            }
+            else if (strcmp(class_name, "DateTime") == 0) {
+                php_date_obj *dateobj = Z_PHPDATE_P(dval);
+                int length = 0;
+                char buffer[33];
+                smart_str dts = { 0 };
+                length = slprintf(buffer, 32, "%03d", (int)floor(dateobj->time->f * 1000 + 0.5)); //same as format 'v'
+                smart_str_append_long(&dts, dateobj->time->sse);
+                smart_str_appendl(&dts, buffer, length);
+                zend_long dtl = atof(ZSTR_VAL(dts.s));
+                ZVAL_DOUBLE(&rval, dtl);
+                rtype = AMFC_DATE;
+                smart_str_free(&dts);
+            }
+            else {*/
+
+            if (class_name) {
+                zend_string_release(class_name);
+            }
         }
+    }
+
+    if (explicit_type) {
+        zend_string_release(explicit_type);
     }
 }
 
@@ -2045,7 +1907,7 @@ static void amf0_serialize_object_data(amf_serialize_output buf, HashTable *ht, 
     ZEND_HASH_FOREACH_KEY_VAL_IND(ht, hdx, key, val) {
         if (key == NULL) {
             char str[32];
-            sprintf(str, "%d", hdx);
+            sprintf(str, "%ld", hdx);
             size_t len = strlen(str);
 
             amf0_write_short(buf, (int)len);
@@ -2053,7 +1915,7 @@ static void amf0_serialize_object_data(amf_serialize_output buf, HashTable *ht, 
         }
         else {
             /* Don't write protected properties or explicit type */
-            if (is_array == 0 && (&key[0] == 0 || strcmp(ZSTR_VAL(key), "_explicitType") == 0)) {
+            if (is_array == 0 && (&key[0] == 0 || zend_string_equals_literal(key, "_explicitType"))) {
                 continue;
             }
             amf0_write_short(buf, (int)ZSTR_LEN(key));
@@ -2081,7 +1943,7 @@ static void amf0_serialize_object_data(amf_serialize_output buf, HashTable *ht, 
 PHP_FUNCTION(amf_encode)
 {
     amf_context_data_t var_hash;
-    zval *val, *zFlags;
+    zval *val = NULL, *zFlags;
     int flags = 0;
     
 #ifdef amf_USE_STRING_BUILDER
@@ -2274,16 +2136,14 @@ static int amf3_read_string(zval *rval, const unsigned char **p, const unsigned 
         if (store_reference == 1) {
             zend_hash_index_update(&(var_hash->strings), zend_hash_num_elements(&(var_hash->strings)), (void *)rval);
             Z_ADDREF_P(rval);
-        }
-        
+        }  
     }
     else {
         int result = amf_get_from_cache(&(var_hash->strings), rval, (len >> 1));
         if (result == SUCCESS) {
             Z_ADDREF_P(rval);
         }
-        return result;
-        
+        return result;      
     }
     return SUCCESS;
 }
@@ -2460,7 +2320,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
 
                 while (1) {
                     zval key, value;
-                    char *end;
+                    char *end = NULL;
                     char tmp[32];
                     int len;
                     int i;
@@ -2534,11 +2394,9 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                 int iExternalizable;
                 int iMember;
                 int bIsArray = 0;
-                int iSuccess = FAILURE;
-                zval zClassDef;
+                zval zClassDef, explicit_type;
                 HashTable *htClassDef;
-                zval class_name;
-                ZVAL_NULL(&class_name);
+                ZVAL_NULL(&explicit_type);
                 
                 bInlineclassDef = (handle & AMF_INLINE_CLASS) != 0;
 
@@ -2561,7 +2419,8 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                     iDynamicObject = handle & AMF_CLASS_DYNAMIC;
 
                     if ((tmp = zend_hash_index_find(htClassDef, 1)) != NULL) {
-                        ZVAL_COPY_VALUE(&class_name, tmp);
+                        ZVAL_COPY_VALUE(&explicit_type, tmp);
+                        Z_ADDREF(explicit_type);
                     }
                 }
                 else {
@@ -2569,15 +2428,15 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                     iDynamicObject = handle & AMF_CLASS_DYNAMIC;
                     nClassMemberCount = handle >> AMF_CLASS_MEMBERCOUNT_SHIFT;
 
-                    amf3_read_string(&class_name, p, max, 1, var_hash);
-                    bTypedObject = Z_STRLEN(class_name) > 0;
+                    amf3_read_string(&explicit_type, p, max, 1, var_hash);
+                    bTypedObject = Z_STRLEN(explicit_type) > 0;
 
                     /* A classdef is an array containing the reference, the class_name, then list of property names */
                     array_init_size(&zClassDef, nClassMemberCount + 2);
                     add_next_index_long(&zClassDef, (bTypedObject ? 1 : 0) | nClassMemberCount << AMF_CLASS_MEMBERCOUNT_SHIFT | iDynamicObject | iExternalizable);
-                    if (add_next_index_zval(&zClassDef, &class_name) == SUCCESS) {
+                    if (add_next_index_zval(&zClassDef, &explicit_type) == SUCCESS) {
                         if (bTypedObject) {
-                            Z_ADDREF(class_name);
+                            Z_ADDREF(explicit_type);
                         }
                     }
 
@@ -2589,127 +2448,111 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                             break;
                         }
                         if (add_next_index_zval(&zClassDef, &key) == SUCCESS) {
-                            Z_ADDREF(key);
+                            /*Z_ADDREF(key);*/
                         }
-                        zval_ptr_dtor(&key);
+                        /*zval_ptr_dtor(&key);*/
                     }
 
                     amf_put_in_cache(&(var_hash->traits), &zClassDef);
                 }
 
-                /* callback for externalizable or class_names not null */
-                if (iExternalizable != 0 || (Z_TYPE(class_name) == IS_STRING && Z_STRLEN(class_name) != 0)) {
-                    if ((iSuccess = amf_invoke_deserialize_callback(rval, iExternalizable != 0 ? AMFE_MAP_EXTERNALIZABLE : AMFE_MAP, &class_name, 0, var_hash)) == SUCCESS) {
-                        if (Z_TYPE_P(rval) == IS_ARRAY) {
-                            bIsArray = 1;
-                        }
-                        else if (Z_TYPE_P(rval) == IS_OBJECT) {
-                            bIsArray = 0;
-                        }
-                        else {
-                            php_error_docref(NULL, E_NOTICE, "amf3 deserialize callback must return an array or object");
-                            iSuccess = FAILURE; /* nor an object or an array */
-                        }
-                    }
-                }
-
-                if (iExternalizable != 0) {
-                    if (iSuccess == FAILURE || Z_TYPE_P(rval) == IS_NULL) {
-                        amf_put_in_cache(&(var_hash->objects), NULL);
-                        amf3_deserialize_var(rval, p, max, var_hash);
+                if (Z_TYPE_P(rval) == IS_NULL || (bIsArray == 0 && (var_hash->flags & AMF_OBJECT_AS_ASSOC) != 0
+                    && !php_memnstr(Z_STRVAL(explicit_type), "flex\\messaging\\messages\\", sizeof("flex\\messaging\\messages\\") - 1, Z_STRVAL(explicit_type) + Z_STRLEN(explicit_type)))
+                ) {
+                    if ((var_hash->flags & AMF_OBJECT_AS_ASSOC) != 0) {
+                        array_init_size(rval, nClassMemberCount);
+                        bIsArray = 1;
                     }
                     else {
-                        amf_put_in_cache(&(var_hash->objects), rval);
-                    }
-                }
-                else {
-                    /* default behaviour */
-                    if (iSuccess == FAILURE || Z_TYPE_P(rval) == IS_NULL) {
-                        if ((var_hash->flags & AMF_OBJECT_AS_ASSOC) != 0) {
-                            array_init_size(rval, nClassMemberCount);
-                            bIsArray = 1;
-                        }
-                        else {
-                            if (bTypedObject != 0) {
-                                zend_class_entry *ce;
-                                if ((ce = zend_lookup_class(Z_STR(class_name))) == NULL) {
-                                    php_error_docref(NULL, E_NOTICE, "amf cannot find class entry %s", Z_STRVAL(class_name));
-                                    object_init(rval);
-                                }
-                                else {
-                                    object_init_ex(rval, ce);
-                                }
+                        if (bTypedObject != 0) {
+                            zend_class_entry *ce;
+                            zval class_name;
+                            ZVAL_DUP(&class_name, &explicit_type);
+                            if (memchr(Z_STRVAL(class_name), '.', Z_STRLEN(class_name))) {
+                                zend_string_chr_to_chr(Z_STR(class_name), '.', '\\');
+                            }
+                            if ((ce = zend_lookup_class(Z_STR(class_name))) == NULL) {
+                                object_init(rval);
+                                add_property_zval(rval, "_explicitType", &class_name);
                             }
                             else {
-                                object_init(rval);
+                                object_init_ex(rval, ce);
                             }
+                            zval_ptr_dtor(&class_name);
+                        }
+                        else {
+                            object_init(rval);
                         }
                     }
+                }
 
-                    amf_put_in_cache(&(var_hash->objects), rval);
+                amf_put_in_cache(&(var_hash->objects), rval);
 
-                    for (iMember = 0; iMember < nClassMemberCount; iMember++) {
-                        zval *key, value;
-                        if ((key = zend_hash_index_find(Z_ARRVAL(zClassDef), iMember + 2)) == NULL) {
-                            php_error_docref(NULL, E_NOTICE, "amf cannot find index for class member %d over %d", iMember, nClassMemberCount);
-                            return FAILURE;
+                for (iMember = 0; iMember < nClassMemberCount; iMember++) {
+                    zval *key, value;
+                    if ((key = zend_hash_index_find(Z_ARRVAL(zClassDef), iMember + 2)) == NULL) {
+                        php_error_docref(NULL, E_NOTICE, "amf cannot find index for class member %d over %d", iMember, nClassMemberCount);
+                        return FAILURE;
+                    }
+                    ZVAL_NULL(&value);
+                    if (amf3_deserialize_var(&value, p, max, var_hash) == FAILURE) {
+                        zval_ptr_dtor(&value);
+                        php_error_docref(NULL, E_NOTICE, "amf cannot read value for class member");
+                        return FAILURE;
+                    }
+                    if (bIsArray == 1) {
+                        add_assoc_zval(rval, Z_STRVAL_P(key), &value);
+                    }
+                    else {
+                        add_property_zval(rval, Z_STRVAL_P(key), &value);
+                        zval_ptr_dtor(&value);
+                    }
+                }
+
+                if (iDynamicObject != 0) {
+                    while (1) {
+                        zval key, value;
+                        ZVAL_NULL(&key);
+                        if (amf3_read_string(&key, p, max, 1, var_hash) == FAILURE) {
+                            zval_ptr_dtor(&key);
+                            php_error_docref(NULL, E_NOTICE, "amf cannot understand key name %X", "");
+                            break;
+                        }
+                        if (Z_STRLEN(key) == 0) {
+                            zval_ptr_dtor(&key);
+                            break;
                         }
                         ZVAL_NULL(&value);
                         if (amf3_deserialize_var(&value, p, max, var_hash) == FAILURE) {
+                            php_error_docref(NULL, E_NOTICE, "amf cannot deserialize member %s", Z_STRVAL(key));
+                            zval_ptr_dtor(&key);
                             zval_ptr_dtor(&value);
-                            php_error_docref(NULL, E_NOTICE, "amf cannot read value for class member");
                             return FAILURE;
                         }
                         if (bIsArray == 1) {
-                            add_assoc_zval(rval, Z_STRVAL_P(key), &value);
+                            add_assoc_zval(rval, Z_STRVAL(key), &value);
                         }
                         else {
-                            add_property_zval(rval, Z_STRVAL_P(key), &value);
+                            add_property_zval(rval, Z_STRVAL(key), &value);
                             zval_ptr_dtor(&value);
                         }
-                    }
-
-                    if (iDynamicObject != 0) {
-                        while (1) {
-                            zval key, value;
-                            ZVAL_NULL(&key);
-                            if (amf3_read_string(&key, p, max, 1, var_hash) == FAILURE) {
-                                zval_ptr_dtor(&key);
-                                php_error_docref(NULL, E_NOTICE, "amf cannot understand key name %X", "");
-                                break;
-                            }
-                            if (Z_STRLEN(key) == 0) {
-                                zval_ptr_dtor(&key);
-                                break;
-                            }
-                            ZVAL_NULL(&value);
-                            if (amf3_deserialize_var(&value, p, max, var_hash) == FAILURE) {
-                                php_error_docref(NULL, E_NOTICE, "amf cannot deserialize member %s", Z_STRVAL(key));
-                                zval_ptr_dtor(&key);
-                                zval_ptr_dtor(&value);
-                                return FAILURE;
-                            }
-                            if (bIsArray == 1) {
-                                add_assoc_zval(rval, Z_STRVAL(key), &value);
-                            }
-                            else {
-                                add_property_zval(rval, Z_STRVAL(key), &value);
-                                zval_ptr_dtor(&value);
-                            }
-                            zval_ptr_dtor(&key);
-                        }
-                    }
-
-                    if (bIsArray == 1) {
-                        if (bTypedObject != 0) {
-                            add_assoc_zval(rval, "_explicitType", &class_name);
-                            Z_ADDREF(class_name);
-                        }
-                    }
-                    else if ((var_hash->flags & AMF_POST_DECODE) != 0) {
-                        amf_invoke_deserialize_callback(rval, AMFE_POST_OBJECT, rval, 0, var_hash);
+                        zval_ptr_dtor(&key);
                     }
                 }
+
+                if (bIsArray == 1) {
+                    if (bTypedObject != 0) {
+                        add_assoc_zval(rval, "_explicitType", &explicit_type);
+                        Z_ADDREF(explicit_type);
+                    }
+                }
+                else if ((var_hash->flags & AMF_POST_DECODE) != 0) {
+                    /* TODO: change post decode to execute a method of typed objects only
+                    amf_invoke_deserialize_callback(rval, AMFE_POST_OBJECT, rval, 0, var_hash);
+                    */
+                }
+
+                zval_ptr_dtor(&explicit_type);
             }
             else {
                 if (amf_get_from_cache(&(var_hash->objects), rval, (handle >> 1)) == FAILURE) {
@@ -2944,15 +2787,16 @@ static int amf0_deserialize_var(zval *rval, const unsigned char **p, const unsig
             }
         }   break;
         case AMF0_TYPEDOBJECT: {
-            zval class_name;
-            ZVAL_NULL(&class_name);
-            if (amf0_read_string(&class_name, p, max, 2, var_hash) == FAILURE) {
-                zval_ptr_dtor(&class_name);
+            zval explicit_type;
+            ZVAL_NULL(&explicit_type);
+            if (amf0_read_string(&explicit_type, p, max, 2, var_hash) == FAILURE) {
+                zval_ptr_dtor(&explicit_type);
                 return FAILURE;
             }
-            if (amf0_read_object_data(rval, p, max, &class_name, 0, 0, var_hash) == FAILURE) {
+            if (amf0_read_object_data(rval, p, max, &explicit_type, 0, 0, var_hash) == FAILURE) {
                 return FAILURE;
             }
+            zval_ptr_dtor(&explicit_type);
         }   break;
         case AMF0_LONGSTRING:
             return amf0_read_string(rval, p, max, 4, var_hash);
@@ -2978,43 +2822,35 @@ static int amf0_deserialize_var(zval *rval, const unsigned char **p, const unsig
     return SUCCESS;
 }
 
-static int amf0_read_object_data(zval *rval, const unsigned char **p, const unsigned char *max, zval *class_name, int as_array, int max_index, amf_context_data_t *var_hash)
+static int amf0_read_object_data(zval *rval, const unsigned char **p, const unsigned char *max, zval *explicit_type, int as_array, int max_index, amf_context_data_t *var_hash)
 {
     HashTable *output = NULL;
-    int callback_done = 0;
 
-    if (as_array == 0 && class_name != NULL && Z_STRLEN_P(class_name) != 0) {
-        if (amf_invoke_deserialize_callback(rval, AMFE_MAP, class_name, 0, var_hash) == SUCCESS) {
-            if (Z_TYPE_P(rval) == IS_ARRAY) {
-                as_array = 1;
-                callback_done = 1;
-                output = Z_ARRVAL_P(rval);
-            }
-            else if (Z_TYPE_P(rval) == IS_OBJECT) {
-                callback_done = 1;
-                output = Z_OBJPROP_P(rval);
-            }
-        }
-    }
-
-    if (callback_done == 0) {
+    if (Z_TYPE_P(rval) == IS_NULL || (Z_TYPE_P(rval) == IS_OBJECT && (var_hash->flags & AMF_OBJECT_AS_ASSOC) != 0)
+        && (!php_memnstr(Z_STRVAL_P(explicit_type), "flex\\messaging\\messages\\", sizeof("flex\\messaging\\messages\\") - 1, Z_STRVAL_P(explicit_type) + Z_STRLEN_P(explicit_type)))
+    ) {
         if (as_array == 1 || (var_hash->flags & AMF_OBJECT_AS_ASSOC) != 0) {
+            zval_ptr_dtor(rval); //removes three memory leaks, but introduces one wrong decode
             array_init_size(rval, max_index);
             as_array = 1;
             output = Z_ARRVAL_P(rval);
         }
-        else if (class_name != NULL) {
-            /* build the corresponding class */
+        else if (explicit_type != NULL) {
             zend_class_entry *ce;
-
-            if ((ce = zend_lookup_class(Z_STR_P(class_name))) == NULL) {
-                php_error_docref(NULL, E_NOTICE, "amf cannot find class %s\n", Z_STRVAL_P(class_name));
+            zval class_name;
+            ZVAL_DUP(&class_name, explicit_type);
+            if (memchr(Z_STRVAL(class_name), '.', Z_STRLEN(class_name))) {
+                zend_string_chr_to_chr(Z_STR(class_name), '.', '\\');
+            }
+            if ((ce = zend_lookup_class(Z_STR(class_name))) == NULL) {
                 object_init(rval);
+                add_property_zval(rval, "_explicitType", &class_name);
             }
             else {
                 object_init_ex(rval, ce);
             }
             output = Z_OBJPROP_P(rval);
+            zval_ptr_dtor(&class_name);
         }
         else {
             object_init(rval);
@@ -3046,7 +2882,7 @@ static int amf0_read_object_data(zval *rval, const unsigned char **p, const unsi
         }
         if (as_array == 1) {
             /* try to convert the string into a number */
-            char *end;
+            char *end = NULL;
             char tmp[32];
             int len = (int)Z_STRLEN(key);
             int i;
@@ -3078,13 +2914,15 @@ static int amf0_read_object_data(zval *rval, const unsigned char **p, const unsi
     }
 
     if (Z_TYPE_P(rval) == IS_ARRAY) {
-        if (class_name != NULL) {
-            add_assoc_zval(rval, "_explicitType", class_name);
-            Z_ADDREF_P(class_name);
+        if (explicit_type != NULL) {
+            add_assoc_zval(rval, "_explicitType", explicit_type);
+            Z_ADDREF_P(explicit_type);
         }
     }
     else if ((var_hash->flags & AMF_POST_DECODE) != 0) {
+        /* TODO: change post decode to execute a method of typed objects only
         amf_invoke_deserialize_callback(rval, AMFE_POST_OBJECT, rval, 0, var_hash);
+        */
     }
     return SUCCESS;
 }
@@ -3093,7 +2931,7 @@ static int amf0_read_object_data(zval *rval, const unsigned char **p, const unsi
 PHP_FUNCTION(amf_decode)
 {
     amf_context_data_t var_hash;
-    zval rval, *zInput = NULL, *zFlags = NULL, *zOffset = NULL;
+    zval *zInput = NULL, *zFlags = NULL, *zOffset = NULL;
     int offset = 0;
     int flags = 0;
     
@@ -3128,13 +2966,15 @@ PHP_FUNCTION(amf_decode)
     if (Z_TYPE_P(zInput) == IS_STRING) {
         const unsigned char *p = (unsigned char *)Z_STRVAL_P(zInput) + offset;
         const unsigned char *p0 = p;
-        ZVAL_NULL(&rval);
+        ZVAL_NULL(return_value);
 
         if (Z_STRLEN_P(zInput) == 0) {
             RETURN_FALSE;
         }
+
         amf_DESERIALIZE_CTOR(var_hash);
-        if (amf0_deserialize_var(&rval, &p, p + Z_STRLEN_P(zInput) - offset, &var_hash) == FAILURE) {
+
+        if (amf0_deserialize_var(return_value, &p, p + Z_STRLEN_P(zInput) - offset, &var_hash) == FAILURE) {
             amf_DESERIALIZE_DTOR(var_hash);
             php_error_docref(NULL, E_NOTICE, "Error at offset %ld of %d bytes", (long)((char *)p - Z_STRVAL_P(zInput)), Z_STRLEN_P(zInput));
             RETURN_FALSE;
@@ -3147,9 +2987,8 @@ PHP_FUNCTION(amf_decode)
             zval_dtor(zOffset);
             ZVAL_LONG(zOffset, offset + p - p0);
         }
-        amf_DESERIALIZE_DTOR(var_hash);
 
-        *return_value = rval;
+        amf_DESERIALIZE_DTOR(var_hash);
     }
     else {
         php_error_docref(NULL, E_NOTICE, "amf_decode requires a string argument");

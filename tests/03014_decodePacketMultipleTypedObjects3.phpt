@@ -1,5 +1,5 @@
 --TEST--
-Decode packet typed object multiple x2
+Decode packet typed object multiple x3
 --DESCRIPTION--
 Decode an AMF3 packet containing multiple typed objects in the request body.
 

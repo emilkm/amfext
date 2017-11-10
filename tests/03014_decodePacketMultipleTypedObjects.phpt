@@ -1,7 +1,7 @@
 --TEST--
-Read AMF0 Number
+Decode packet typed object multiple
 --DESCRIPTION--
-Reads a number in AMF0 format.
+Decode an AMF3 packet containing multiple typed objects in the request body.
 
 
 

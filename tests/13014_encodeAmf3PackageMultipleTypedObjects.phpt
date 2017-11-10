@@ -1,7 +1,7 @@
 --TEST--
-Write AMF3 action message.
+Encode packet typed object multiple
 --DESCRIPTION--
-Writes an action message in AMF3 format.
+Encode an AMF3 packet containing multiple typed objects in the request body.
 
 
 

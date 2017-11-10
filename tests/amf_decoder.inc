@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/amf_classes.inc';
 require_once __DIR__ . '/amf_messages.inc';
 
 class AmfDecoder
@@ -62,7 +63,7 @@ class AmfDecoder
      *
      * @var bool
      */
-    protected $amfObjectAsArray = false;
+    protected $decodeAmfObjectAsArray = false;
 
     /**
      * @var string The encoded data
@@ -138,22 +139,9 @@ class AmfDecoder
      *
      * @param bool $value
      */
-    public function decodeAmfObjectAsArray($value)
+    public function setDecodeAmfObjectAsArray($value)
     {
-        $this->amfObjectAsArray = $value;
-    }
-
-	/**
-     * References must be reset before reading a top level object,
-     * such as a header or a body.
-     */
-    public function resetReferences()
-    {
-        $this->objects0 = array();
-        $this->strings = array();
-        $this->objects = array();
-        $this->traits = array();
-        $this->avmPlus = false;
+        $this->decodeAmfObjectAsArray = $value;
     }
 
     protected function loadClass($className)
@@ -173,24 +161,33 @@ class AmfDecoder
      */
     protected function resolveType($className)
     {
-        $clazz = 'stdClass';
-        if ($className == '' || $className == 'Object') {
-            $obj = new $clazz();
-        } else {
-            /*if ($pos = strpos($className, 'flex.messaging.messages.') === 0) {
-                $class = substr($className, 24);
-                $clasx = $class;
-            } else {*/
+        if ($this->decodeAmfObjectAsArray && strpos($className, 'flex.messaging.messages.') === false) {
+            $arr = [];
+            if ($className != '' && $className != 'Object') {
+                $arr[self::REMOTE_CLASS_FIELD] = $className;
+            }
+            return $arr;
+        }
+
+        try {
+            $clazz = 'stdClass';
+            if ($className == '' || $className == 'Object') {
+                $obj = new $clazz();
+            } else {
                 $clasx = str_replace('.', '\\', $className);
-            //}
-            if (class_exists($clasx)) {
-                $clazz = $clasx;
+                if (class_exists($clasx)) {
+                    $clazz = $clasx;
+                }
+                $obj = new $clazz();
+                if ($clazz == 'stdClass') {
+                    $remoteClassField = self::REMOTE_CLASS_FIELD;
+                    $obj->$remoteClassField = $className;
+                }
             }
-            $obj = new $clazz();
-            if ($clazz == 'stdClass') {
-                $remoteClassField = self::REMOTE_CLASS_FIELD;
-                $obj->$remoteClassField = $className;
-            }
+        } catch (Exception | Error $e) {
+            $obj = new stdClass();
+            $remoteClassField = self::REMOTE_CLASS_FIELD;
+            $obj->$remoteClassField = $className;
         }
         return $obj;
     }
@@ -206,7 +203,7 @@ class AmfDecoder
     public function run()
     {
         $this->decodeFlags = ((!$this->bigEndianMachine ? self::AMF_BIGENDIAN : 0)
-            | ($this->amfObjectAsArray ? self::AMF_OBJECT_AS_ASSOC : 0));
+            | ($this->decodeAmfObjectAsArray ? self::AMF_OBJECT_AS_ASSOC : 0));
         return amf_decode($this->data, $this->decodeFlags, $this->pos, array(&$this, 'decodeCallback'));
     }
 
@@ -309,7 +306,6 @@ class AmfDecoder
      */
     protected function readHeader()
     {
-        $this->resetReferences();
         $header = new MessageHeader();
         $header->name = $this->readUtf();
         $header->mustUnderstand = $this->readBoolean();
@@ -325,7 +321,6 @@ class AmfDecoder
      */
     protected function readBody()
     {
-        $this->resetReferences();
         $message = new MessageBody();
         $message->targetURI = $this->readUtf();
         $message->responseURI = $this->readUtf();
@@ -444,317 +439,4 @@ class AmfDecoder
     }
 }
 
-class Date
-{
-    /**
-     * @var int
-     */
-    public $timestamp;
 
-    /**
-     * @var string
-     */
-    public $milli;
-
-    /**
-     * AMF serialized date as the number of milliseconds elapsed
-     * since the epoch of midnight on 1st Jan 1970
-     *
-     * @param int $amfdate
-     */
-    public function __construct($amfdate)
-    {
-        $timestamp = $amfdate / 1000;
-        $this->milli = round($timestamp - ($timestamp >> 0), 3) * 1000;
-        $this->timestamp = floor($timestamp);
-    }
-
-    /**
-     * @return string
-     */
-    public function __toString()
-    {
-        return date('Y-m-d H:i:s.', $this->timestamp) . $this->milli;
-    }
-}
-
-class Xml
-{
-    /**
-     * @var string XML data
-     */
-    public $data;
-
-    /**
-     * @param string $xmlstring
-     */
-    public function __construct($xmlstring)
-    {
-        $this->data = preg_replace('/\>(\n|\r|\r\n| |\t)*\</', '><', trim($xmlstring));
-    }
-
-    /**
-     * @return string
-     */
-    public function __toSring()
-    {
-        return $this->data;
-    }
-}
-
-class XmlDocument
-{
-    /**
-     * @var string XML data
-     */
-    public $data;
-
-    /**
-     * @param string $xmlstring
-     */
-    public function __construct($xmlstring)
-    {
-        $this->data = preg_replace('/\>(\n|\r|\r\n| |\t)*\</', '><', trim($xmlstring));
-    }
-
-    /**
-     * @return string
-     */
-    public function __toSring()
-    {
-        return $this->data;
-    }
-}
-
-class ByteArray
-{
-    /**
-     * @var string ByteString data
-     */
-    public $data;
-
-    /**
-     * @param string $data
-     */
-    public function __construct($data)
-    {
-        $this->data = $data;
-    }
-
-    /**
-     * @return string
-     */
-    public function __toSring()
-    {
-        return $this->data;
-    }
-}
-
-class Vector
-{
-    const AMF3_VECTOR_INT           = 13;
-    const AMF3_VECTOR_UINT          = 14;
-    const AMF3_VECTOR_DOUBLE        = 15;
-    const AMF3_VECTOR_OBJECT        = 16;
-
-    /**
-     * @var int The type of vector.
-     */
-    public $type = self::AMF3_VECTOR_OBJECT;
-
-    /**
-     * @var bool fixed or variable length
-     */
-    public $fixed = false;
-
-    /**
-     * @var array of primitives or objects
-     */
-    public $data;
-
-    /**
-     * @param int   $type
-     * @param array $data
-     */
-    public function __construct($type, $data)
-    {
-        $this->type = $type;
-        $this->data = $data;
-    }
-
-    /**
-     * @return string
-     */
-    public function __toSring()
-    {
-        $typestr = 'object';
-        switch ($this->type) {
-            case self::AMF3_VECTOR_INT:
-                $typestr = 'int';
-                break;
-            case self::AMF3_VECTOR_UINT:
-                $typestr = 'uint';
-                break;
-            case self::AMF3_VECTOR_DOUBLE:
-                $typestr = 'double';
-                break;
-            case self::AMF3_VECTOR_OBJECT:
-                $typestr = 'object';
-                break;
-        }
-        return 'A ' . ($this->fixed ? 'fixed' : 'variable') . ' Vector ' . $typestr;
-    }
-}
-
-
-/******************************************************************************/
-/*                                  AMF                                       */
-/******************************************************************************/
-
-class ActionMessage
-{
-    /**
-     * @var int
-     */
-    public $version;
-
-    /**
-     * @var array
-     */
-    public $headers;
-
-    /**
-     * @var array
-     */
-    public $bodies;
-
-    /**
-     * @param int $version
-     */
-    public function __construct($version)
-    {
-        $this->version = $version;
-        $this->bodies = array();
-    }
-
-    /**
-     * @return int The number of headers
-     */
-    public function getHeaderCount()
-    {
-        return (is_array($this->headers)) ? count($this->headers) : 0;
-    }
-
-    /**
-     * @return int The number of bodies
-     */
-    public function getBodyCount()
-    {
-        return (is_array($this->bodies)) ? count($this->bodies) : 0;
-    }
-
-    /**
-     * @param mixed $index
-     *
-     * @return MessageBody
-     */
-    public function getBody($index)
-    {
-        return $this->bodies[$index];
-    }
-
-    /*public function sessionId() {
-        foreach ($this->headers as $header) {
-            if ($header->name == 'sid') {
-                return $header->data;
-            }
-        }
-        return null;
-    }*/
-}
-
-class MessageHeader
-{
-    /**
-     * @var string
-     */
-    public $name;
-
-    /**
-     * @var bool
-     */
-    public $mustUnderstand;
-
-    /**
-     * @var mixed
-     */
-    public $data;
-
-    /**
-     * @param string $name
-     * @param bool $mustUnderstand
-     * @param mixed $data
-     */
-    public function __construct($name = '', $mustUnderstand = false, $data = null) {
-        $this->name = $name;
-        $this->mustUnderstand = (bool) $mustUnderstand;
-        $this->data = $data;
-    }
-}
-
-class MessageBody
-{
-    /**
-     * @var string
-     */
-    public $targetURI;
-
-    /**
-     * @var string
-     */
-    public $responseURI;
-
-    /**
-     * @var mixed
-     */
-    public $data;
-
-    /**
-     * Incoming: the deserializer will set all properties with values
-     * from the AMF packet. Outgoing: parameters must be provided.
-     *
-     * @param string $targetURI
-     * @param string $responseURI
-     */
-    public function __construct($targetURI = null, $responseURI = null)
-    {
-        if ($targetURI == null && $responseURI == null) {
-            return;
-        }
-
-        $this->_explicitType = 'flex.messaging.io.amf.MessageBody';
-
-        $this->targetURI = $targetURI == null ? 'null' : $targetURI;
-        $this->responseURI = $responseURI == null ? 'null' : $responseURI;
-    }
-
-    /**
-     * @return AbstractMessage
-     */
-    public function getDataAsMessage()
-    {
-        if (is_array($this->data)) {
-            $message = $this->data[0];
-        } else {
-            $message = $this->data;
-        }
-        if (!($message instanceof CommandMessage)
-            && !($message instanceof RemotingMessage)
-            && !($message instanceof AcknowledgeMessage)
-            && !($message instanceof ErrorMessage)
-        ) {
-            throw new Exception('Unsupported message type.');
-        }
-        return $message;
-    }
-}
