@@ -2826,8 +2826,8 @@ static int amf0_read_object_data(zval *rval, const unsigned char **p, const unsi
 {
     HashTable *output = NULL;
 
-    if (Z_TYPE_P(rval) == IS_NULL || (Z_TYPE_P(rval) == IS_OBJECT && (var_hash->flags & AMF_OBJECT_AS_ASSOC) != 0)
-        && (!php_memnstr(Z_STRVAL_P(explicit_type), "flex\\messaging\\messages\\", sizeof("flex\\messaging\\messages\\") - 1, Z_STRVAL_P(explicit_type) + Z_STRLEN_P(explicit_type)))
+    if (Z_TYPE_P(rval) == IS_NULL || (Z_TYPE_P(rval) == IS_OBJECT && (var_hash->flags & AMF_OBJECT_AS_ASSOC) != 0
+        && !php_memnstr(Z_STRVAL_P(explicit_type), "flex\\messaging\\messages\\", sizeof("flex\\messaging\\messages\\") - 1, Z_STRVAL_P(explicit_type) + Z_STRLEN_P(explicit_type)))
     ) {
         if (as_array == 1 || (var_hash->flags & AMF_OBJECT_AS_ASSOC) != 0) {
             zval_ptr_dtor(rval); //removes three memory leaks, but introduces one wrong decode
