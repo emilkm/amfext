@@ -1568,7 +1568,7 @@ static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *ht,
 
 static int amf3_serialize_specific(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash)
 {
-    int amfc_type = FAILURE, is_userland = 0;
+    int amfc_type = FAILURE;
     zval rval;
     uint32_t object_index = 0;
     zend_string *class_name = NULL;
@@ -1583,26 +1583,26 @@ static int amf3_serialize_specific(amf_serialize_output buf, zval *val, amf_cont
     else if (zend_string_equals_literal(class_name, "DOMElement")) {
         amfc_type = AMFC_XMLDOCUMENT;
     }
-    else {
-        is_userland = 1;
+
+    if (amfc_type == FAILURE) {
+        HashTable *ht = AMF_G(userland_types);
+        zend_string *k;
+        zval *v;
+
+        ZEND_HASH_FOREACH_STR_KEY_VAL(ht, k, v) {
+            if (!k || Z_TYPE_P(v) != IS_LONG || Z_LVAL_P(v) < 0 || Z_LVAL_P(v) > 8) {
+                continue;
+            }
+
+            if (zend_string_equals(class_name, k)) {
+                amfc_type = (int)Z_LVAL_P(v);
+                break;
+            }
+
+        } ZEND_HASH_FOREACH_END();
     }
 
-    HashTable *ht = AMF_G(userland_types);
-    zend_string *k;
-    zval *v;
-
-    ZEND_HASH_FOREACH_STR_KEY_VAL(ht, k, v) {
-        if (!k || Z_TYPE_P(v) != IS_LONG || Z_LVAL_P(v) < 0 || Z_LVAL_P(v) > 8) {
-            continue;
-        }
-
-        if (zend_string_equals(class_name, k)) {
-            amfc_type = (int)Z_LVAL_P(v);
-            break;
-        }
-        
-    } ZEND_HASH_FOREACH_END();
-
+    zend_string_release(class_name);
     if (amfc_type == FAILURE) {
         return FAILURE;
     }
@@ -2082,7 +2082,7 @@ static void amf0_serialize_object_data(amf_serialize_output buf, HashTable *ht, 
 
 static int amf0_serialize_specific(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash)
 {
-    int amfc_type = FAILURE, is_userland = 0;
+    int amfc_type = FAILURE;
     zval rval;
     uint32_t object_index = 0;
     zend_string *class_name = NULL;
@@ -2097,25 +2097,24 @@ static int amf0_serialize_specific(amf_serialize_output buf, zval *val, amf_cont
     else if (zend_string_equals_literal(class_name, "DOMElement")) {
         amfc_type = AMFC_XMLDOCUMENT;
     }
-    else {
-        is_userland = 1;
+
+    if (amfc_type == FAILURE) {
+        HashTable *ht = AMF_G(userland_types);
+        zend_string *k;
+        zval *v;
+
+        ZEND_HASH_FOREACH_STR_KEY_VAL(ht, k, v) {
+            if (!k || Z_TYPE_P(v) != IS_LONG || Z_LVAL_P(v) < 0 || Z_LVAL_P(v) > 8) {
+                continue;
+            }
+
+            if (zend_string_equals(class_name, k)) {
+                amfc_type = (int)Z_LVAL_P(v);
+                break;
+            }
+
+        } ZEND_HASH_FOREACH_END();
     }
-
-    HashTable *ht = AMF_G(userland_types);
-    zend_string *k;
-    zval *v;
-
-    ZEND_HASH_FOREACH_STR_KEY_VAL(ht, k, v) {
-        if (!k || Z_TYPE_P(v) != IS_LONG || Z_LVAL_P(v) < 0 || Z_LVAL_P(v) > 8) {
-            continue;
-        }
-
-        if (zend_string_equals(class_name, k)) {
-            amfc_type = (int)Z_LVAL_P(v);
-            break;
-        }
-
-    } ZEND_HASH_FOREACH_END();
 
     zend_string_release(class_name);
     if (amfc_type == FAILURE) {
