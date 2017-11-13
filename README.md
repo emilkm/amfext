@@ -32,12 +32,11 @@ For PHP5 see the `php56` branch.
 * Changed the object serialization to support traits and traits references.
 * Setup Travis CI.
 * Setup AppVeyor.
-* Remove dependency on userland callbacks.
 * Added scripts for testing through PHP CLI Server, which helped with detecting some issues.
 
 # TODO
 
-* Re-add support for Date, ByteArray, XML, XML Document, and Vector types. (As support for userland callbacks was removed, these need to be done again, as they were handled in the callback.)
+* Re-add support for XML, XML Document, and Vector types.
 * Write docs.
 * ...
 
