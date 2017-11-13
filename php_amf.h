@@ -11,7 +11,7 @@ extern zend_module_entry amf_module_entry;
 #define phpext_amf_ptr &amf_module_entry
 
 ZEND_BEGIN_MODULE_GLOBALS(amf)
-HashTable   *user_classes;
+HashTable   *userland_types;
 intptr_t     hash_mask_handle;
 intptr_t     hash_mask_handlers;
 int          hash_mask_init;

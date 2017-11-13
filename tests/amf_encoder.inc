@@ -8,28 +8,23 @@ class AmfEncoder
 
     const AMF_AMF3 = 1;
     const AMF_BIGENDIAN = 2;
-    const AMF0_ASSOC = 4;
-    const AMF_POST_DECODE = 8;
-    const AMF_AS_STRING_BUILDER = 16;
-    const AMF_TRANSLATE_CHARSET = 32;
-    const AMF_TRANSLATE_CHARSET_FAST = 96; //32|64
-    const AMF3_NSND_ARRAY_AS_OBJECT = 128;
+    const AMF_OBJECT_AS_ASSOC = 4;
+    const AMF3_NSND_ARRAY_AS_OBJECT = 8;
+    const AMF_USE_RLAND_DATE = 16;
+    const AMF_USE_RLAND_XML = 32;
+    const AMF_USE_RLAND_XMLDOCUMENT = 64;
 
-    const AMFC_RAW = 0;
-    const AMFC_XML = 1;
-    const AMFC_OBJECT = 2;
-    const AMFC_TYPEDOBJECT = 3;
-    const AMFC_ANY = 4;
-    const AMFC_ARRAY = 5;
-    const AMFC_NONE = 6;
-    const AMFC_BYTEARRAY = 7;
-    const AMFC_EXTERNAL = 8;
-    const AMFC_DATE = 9;
-    const AMFC_XMLDOCUMENT = 10;
-    const AMFC_VECTOR_OBJECT = 11;
+    const AMFC_DATE = 0;
+    const AMFC_BYTEARRAY = 1;
+    const AMFC_XML = 2;
+    const AMFC_XMLDOCUMENT = 3;
+    const AMFC_VECTOR_INT = 4;
+    const AMFC_VECTOR_UINT = 5;
+    const AMFC_VECTOR_DOUBLE = 6;
+    const AMFC_VECTOR_OBJECT = 7;
+    const AMFC_EXTERNALIZABLE = 8;
 
     public $encodeFlags;
-    public $callbackTypes = '|Date|DateTime|Xml|SimpleXMLElement|XmlDocument|DOMElement|ByteArray|Vector|';
 
     /**
      * @var bool
@@ -119,50 +114,68 @@ class AmfEncoder
      */
     public function run($value)
     {
-        $settings = new stdClass();
+        $userlandTypes = [
+            'Date' => self::AMFC_DATE,
+            'ByteArray' => self::AMFC_BYTEARRAY,
+            'Xml' => self::AMFC_XML,
+            'XmlDocument' => self::AMFC_XMLDOCUMENT,
+            'Vector' => self::AMFC_VECTOR_OBJECT
+        ];
         $this->encodeFlags = ($this->avmPlus ? self::AMF_AMF3 : 0)
             | (!$this->bigEndianMachine ? self::AMF_BIGENDIAN : 0)
             | ($this->amf3nsndArrayAsObject ? self::AMF3_NSND_ARRAY_AS_OBJECT : 0);
-        return amf_encode($value, $this->encodeFlags, array(&$this, 'encodeCallback'));
+        return amf_encode($value, $this->encodeFlags, $userlandTypes, array(&$this, 'encodeCallback'));
     }
 
-    private function encodeCallback($value)
+    private function encodeCallback($type, $value)
     {
-        if (is_object($value)) {
-            if ($value instanceof Date) {
-                $amfdate = (float) $value->timestamp . $value->milli + 0.0;
-                return array($amfdate, self::AMFC_DATE);
-            } elseif ($value instanceof DateTime) {
-                $amfdate = (float) $value->getTimeStamp() . floor($value->format('u') / 1000) + 0.0;
-                return array($amfdate, self::AMFC_DATE);
-            } elseif ($value instanceof ByteArray) {
-                return array($value->data, self::AMFC_BYTEARRAY);
-            } elseif ($value instanceof Xml) {
-                return array($value->data, self::AMFC_XML);
-            } elseif ($value instanceof SimpleXMLElement) {
-                $xmlstring = preg_replace('/\>(\n|\r|\r\n| |\t)*\</', '><', trim($value->asXML()));
-                return array($xmlstring, self::AMFC_XML);
-            } elseif ($value instanceof XmlDocument) {
-                return array($value->data, self::AMFC_XMLDOCUMENT);
-            } elseif ($value instanceof DOMElement) {
-                $xmlstring = preg_replace('/\>(\n|\r|\r\n| |\t)*\</', '><', trim($value->ownerDocument->saveXML($value)));
-                return array($xmlstring, self::AMFC_XMLDOCUMENT);
-            } elseif ($value instanceof Vector) {
-                return array($value, self::AMFC_VECTOR_OBJECT);
-            } else {
-                $className = get_class($value);
-                $remoteClassField = self::REMOTE_CLASS_FIELD;
-                if (isset($value->$remoteClassField)) {
-                    $className = $value->$remoteClassField;
+        switch ($type) {
+            case self::AMFC_DATE:
+                if ($value instanceof Date) {
+                    $amfdate = (float) $value->timestamp . $value->milli + 0.0;
+                } elseif ($value instanceof DateTime) {
+                    $amfdate = (float) $value->getTimeStamp() . floor($value->format('u') / 1000) + 0.0;
                 } else {
-                    $className = str_replace('\\', '.', $className);
+                    throw new Exception('invalid type in encode callback : ' . $type);
                 }
-                if ($className == '') {
-                    return array($value, self::AMFC_OBJECT, $className);
+                return $amfdate;
+            case self::AMFC_BYTEARRAY:
+                if ($value instanceof ByteArray) {
+                    $bytestring = $value->data;
                 } else {
-                    return array($value, self::AMFC_TYPEDOBJECT, $className);
+                    throw new Exception('invalid type in encode callback : ' . $type);
                 }
-            }
+                return $bytestring;
+            case self::AMFC_XML:
+                if ($value instanceof Xml) {
+                    $xmlstring = $value->data;
+                } elseif ($value instanceof SimpleXMLElement) {
+                    $xmlstring = preg_replace('/\>(\n|\r|\r\n| |\t)*\</', '><', trim($value->asXML()));
+                } else {
+                    throw new Exception('invalid type in encode callback : ' . $type);
+                }
+                return $xmlstring;
+            case self::AMFC_XMLDOCUMENT:
+                if ($value instanceof XmlDocument) {
+                    $xmlstring = $value->data;
+                } elseif ($value instanceof DOMElement) {
+                    $xmlstring = preg_replace('/\>(\n|\r|\r\n| |\t)*\</', '><', trim($value->ownerDocument->saveXML($value)));
+                } else {
+                    throw new Exception('invalid type in encode callback : ' . $type);
+                }
+                return $xmlstring;
+            case self::AMFC_VECTOR_INT:
+            case self::AMFC_VECTOR_UINT:
+            case self::AMFC_VECTOR_DOUBLE:
+            case self::AMFC_VECTOR_OBJECT:
+                if (!($value instanceof Vector)) {
+                    throw new Exception('invalid type in encode callback : ' . $type);
+                }
+                return $value;
+            case self::AMFC_EXTERNALIZABLE:
+                throw new Exception('not supported yet');
+            default:
+                throw new Exception('invalid type in encode callback : ' . $type);
         }
     }
 

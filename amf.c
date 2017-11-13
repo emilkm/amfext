@@ -33,7 +33,7 @@ ZEND_DECLARE_MODULE_GLOBALS(amf)
 
 static PHP_GINIT_FUNCTION(amf)
 {
-    amf_globals->user_classes = NULL;
+    amf_globals->userland_types = NULL;
 }
 
 static zend_string *amf_object_hash(zval *obj)
@@ -52,21 +52,49 @@ static zend_string *amf_object_hash(zval *obj)
     return strpprintf(32, "%016zx%016zx", hash_handle, hash_handlers);
 }
 
+ZEND_BEGIN_ARG_INFO_EX(arginfo_amf_encode, 0, 0, 1)
+    ZEND_ARG_INFO(0, data)
+    ZEND_ARG_INFO(0, encode_flags)
+    ZEND_ARG_INFO(0, userland_types)
+    ZEND_ARG_INFO(0, encode_callback)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_INFO_EX(arginfo_amf_decode, 0, 0, 1)
     ZEND_ARG_INFO(0, data)
-    ZEND_ARG_INFO(1, decode_flags)
     ZEND_ARG_INFO(1, position)
+    ZEND_ARG_INFO(0, decode_flags)
+    ZEND_ARG_INFO(0, userland_types)
     ZEND_ARG_INFO(0, decode_callback)
 ZEND_END_ARG_INFO()
 
 static zend_function_entry amf_functions[] = 
 {
-    PHP_FE(amf_encode, NULL)
+    PHP_FE(amf_encode, arginfo_amf_encode)
     PHP_FE(amf_decode, arginfo_amf_decode)
     {NULL, NULL, NULL}
 };
 
-static PHP_MINFO_FUNCTION(amf) 
+PHP_RINIT_FUNCTION(amf)
+{
+    AMF_G(userland_types) = NULL;
+    AMF_G(hash_mask_init) = 0;
+    return SUCCESS;
+}
+
+PHP_RSHUTDOWN_FUNCTION(amf)
+{
+    if (AMF_G(userland_types)) {
+        /*zend_hash_destroy(AMF_G(userland_types));
+        FREE_HASHTABLE(AMF_G(userland_types));*/
+        AMF_G(userland_types) = NULL;
+    }
+    if (AMF_G(hash_mask_init)) {
+        AMF_G(hash_mask_init) = 0;
+    }
+    return SUCCESS;
+}
+
+static PHP_MINFO_FUNCTION(amf)
 {
     php_info_print_table_start();
     php_info_print_table_header(2, "AMF Native Support", "enabled");
@@ -74,7 +102,7 @@ static PHP_MINFO_FUNCTION(amf)
     php_info_print_table_end();
 }
 
-/**  resource StringBuilder */
+  /**  resource StringBuilder */
 #define PHP_AMF_STRING_BUILDER_RES_NAME "String Builder"
 static void php_amf_sb_dtor(zend_resource *rsrc);
 int amf_serialize_output_resource_reg;
@@ -92,11 +120,15 @@ zend_module_entry amf_module_entry =
     amf_functions,
     PHP_MINIT(amf),
     NULL,
-    NULL,
-    NULL,
+    PHP_RINIT(amf),
+    PHP_RSHUTDOWN(amf),
     PHP_MINFO(amf),
     PHP_AMF_VERSION,
-    STANDARD_MODULE_PROPERTIES
+    PHP_MODULE_GLOBALS(amf),
+    PHP_GINIT(amf),
+    NULL,
+    NULL,
+    STANDARD_MODULE_PROPERTIES_EX
 };
 
 /* AMF enumeration {{{ */
@@ -107,17 +139,11 @@ enum AMF0Codes { AMF0_NUMBER, AMF0_BOOLEAN, AMF0_STRING, AMF0_OBJECT, AMF0_MOVIE
 /** AMF3 types */
 enum AMF3Codes { AMF3_UNDEFINED, AMF3_NULL, AMF3_FALSE, AMF3_TRUE, AMF3_INTEGER, AMF3_NUMBER, AMF3_STRING, AMF3_XMLDOCUMENT, AMF3_DATE, AMF3_ARRAY, AMF3_OBJECT, AMF3_XML, AMF3_BYTEARRAY, AMF3_VECTOR_INT, AMF3_VECTOR_UINT, AMF3_VECTOR_DOUBLE, AMF3_VECTOR_OBJECT };
 
-/** return values for callbacks */
-enum AMFCallbackResult { AMFC_RAW, AMFC_XML, AMFC_OBJECT, AMFC_TYPEDOBJECT, AMFC_ANY, AMFC_ARRAY, AMFC_NONE, AMFC_BYTEARRAY, AMFC_EXTERNAL, AMFC_DATE, AMFC_XMLDOCUMENT, AMFC_VECTOR_OBJECT };
+/** types handled by callbacks */
+enum AMFCallbackTypes { AMFC_DATE, AMFC_BYTEARRAY, AMFC_XML, AMFC_XMLDOCUMENT, AMFC_VECTOR_INT, AMFC_VECTOR_UINT, AMFC_VECTOR_DOUBLE, AMFC_VECTOR_OBJECT, AMFC_EXTERNALIZABLE, AMFC_OBJECT, AMFC_TYPEDOBJECT };
 
 /** flags passed to amf_encode and amf_decode */
-enum AMFFlags { AMF_AMF3 = 1, AMF_BIGENDIAN = 2, AMF_OBJECT_AS_ASSOC = 4, AMF_POST_DECODE = 8, AMF_AS_STRING_BUILDER = 16, AMF_TRANSLATE_CHARSET = 32, AMF_TRANSLATE_CHARSET_FAST = 32 | 64, AMF3_NSND_ARRAY_AS_OBJECT = 128 };
-
-/** events invoked by the callback */
-enum AMFEvent { AMFE_MAP = 1, AMFE_POST_OBJECT, AMFE_POST_XML, AMFE_MAP_EXTERNALIZABLE, AMFE_POST_BYTEARRAY, AMFE_TRANSLATE_CHARSET, AMFE_POST_DATE, AMFE_POST_XMLDOCUMENT, AMFE_VECTOR_INT, AMFE_VECTOR_UINT, AMFE_VECTOR_DOUBLE, AMFE_VECTOR_OBJECT };
-
-/** flags for the recordset _amf_recordset_ */
-enum AMFRecordSet { AMFR_NONE = 0, AMFR_ARRAY = 1, AMFR_ARRAY_COLLECTION = 2 };
+enum AMFFlags { AMF_AMF3 = 1, AMF_BIGENDIAN = 2, AMF_OBJECT_AS_ASSOC = 4, AMF3_NSND_ARRAY_AS_OBJECT = 8, AMF_USE_RLAND_DATE = 16, AMF_USE_RLAND_XML = 32, AMF_USE_RLAND_XMLDOCUMENT = 64 };
 
 /** flags for AMF3_OBJECT */
 enum AMF3ObjectDecl { AMF_INLINE_ENTITY = 1, AMF_INLINE_CLASS = 2, AMF_CLASS_EXTERNAL = 4, AMF_CLASS_DYNAMIC = 8, AMF_CLASS_MEMBERCOUNT_SHIFT = 4, AMF_CLASS_SHIFT = 2 };
@@ -1096,43 +1122,29 @@ static inline void amf3_write_objecthead(amf_serialize_output buf, int head)
 }
 
 
-static int amf_invoke_serialize_callback(zval *rval, zval *arg, amf_context_data_t *var_hash)
+static void amf_invoke_serialize_callback(zval *rval, int amfc_type, zval *arg, amf_context_data_t *var_hash)
 {
-    int result, rtype = AMFC_TYPEDOBJECT;
-    zval retval, params[1];
+    int result;
+    zval retval, params[2];
 
-    ZVAL_COPY_VALUE(&params[0], arg);
+    ZVAL_LONG(&params[0], amfc_type);
+	ZVAL_COPY_VALUE(&params[1], arg);
 
     var_hash->fci.params = params;
-    var_hash->fci.param_count = 1;
+    var_hash->fci.param_count = 2;
     var_hash->fci.no_separation = 0;
     var_hash->fci.retval = &retval;
 
     if ((result = zend_call_function(&(var_hash->fci), &(var_hash->fci_cache))) == FAILURE) {
         php_error_docref(NULL, E_NOTICE, "amf serialize callback problem");
-        rtype = AMFC_NONE;
     }
     else if (EG(exception)) {
         php_error_docref(NULL, E_NOTICE, "amf serialize callback exception");
-        rtype = AMFC_NONE;
-    }
-    else if (Z_TYPE(retval) == IS_ARRAY) {
-        zval *tmp;
-        HashTable *ht = Z_ARRVAL(retval);
-
-        if ((tmp = zend_hash_index_find(ht, 0)) != NULL) {
-            ZVAL_COPY(rval, tmp);
-        }
-
-        if ((tmp = zend_hash_index_find(ht, 1)) != NULL) {
-            convert_to_long_ex(tmp);
-            rtype = (int)Z_LVAL_P(tmp);
-        }
     }
 
+    ZVAL_COPY(rval, &retval);
     zval_ptr_dtor(&retval);
-
-    return rtype;
+    zval_ptr_dtor(&params[0]);
 }
 
 static zend_string *amf_get_explicit_type(zval *val)
@@ -1165,6 +1177,7 @@ static void amf3_serialize_array(amf_serialize_output buf, HashTable *ht, amf_co
 static void amf3_serialize_object(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash);
 static void amf3_serialize_object_anonymous(amf_serialize_output buf, HashTable *ht, amf_context_data_t *var_hash);
 static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *ht, zend_string *class_name, amf_context_data_t *var_hash);
+static int amf3_serialize_specific(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash);
 static void amf3_serialize_vector(amf_serialize_output buf, HashTable *ht, amf_context_data_t *var_hash);
 
 static void amf3_serialize_var(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash)
@@ -1364,7 +1377,9 @@ static void amf3_serialize_object(amf_serialize_output buf, zval *val, amf_conte
         amf_cache_object(&(var_hash->objects), val, &object_index, &(var_hash->next_object_index), OCA_LOOKUP_AND_ADD);
         amf3_serialize_object_anonymous(buf, Z_OBJPROP_P(val), var_hash);
     }
-    else {
+    else if (amf3_serialize_specific(buf, val, var_hash) == SUCCESS) {
+
+    } else {
         if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_TYPEDOBJECT) == FAILURE) {
             amf3_write_objecthead(buf, (int)object_index << 1);
         }
@@ -1460,7 +1475,6 @@ static int my_traits_hash_zval_identical_function(zval *z1, zval *z2)
 /** serializes a Hash Table as AMF3 plain object */
 static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *ht, zend_string *class_name, amf_context_data_t *var_hash)
 {
-    zend_ulong hdx;
     zend_string *key;
     zval *val, *zref, properties, reference;
     ulong ref;
@@ -1550,6 +1564,161 @@ static void amf3_serialize_object_typed(amf_serialize_output buf, HashTable *ht,
 
         amf3_write_emptystring(buf);
     }
+}
+
+static int amf3_serialize_specific(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash)
+{
+    int amfc_type = FAILURE, is_userland = 0;
+    zval rval;
+    uint32_t object_index = 0;
+    zend_string *class_name = NULL;
+    class_name = zend_string_copy(Z_OBJCE_P(val)->name);
+
+    if (zend_string_equals_literal(class_name, "DateTime")) {
+        amfc_type = AMFC_DATE;
+    }
+    else if (zend_string_equals_literal(class_name, "SimpleXMLElement")) {
+        amfc_type = AMFC_XML;
+    }
+    else if (zend_string_equals_literal(class_name, "DOMElement")) {
+        amfc_type = AMFC_XMLDOCUMENT;
+    }
+    else {
+        is_userland = 1;
+    }
+
+    HashTable *ht = AMF_G(userland_types);
+    zend_string *k;
+    zval *v;
+
+    ZEND_HASH_FOREACH_STR_KEY_VAL(ht, k, v) {
+        if (!k || Z_TYPE_P(v) != IS_LONG || Z_LVAL_P(v) < 0 || Z_LVAL_P(v) > 8) {
+            continue;
+        }
+
+        if (zend_string_equals(class_name, k)) {
+            amfc_type = (int)Z_LVAL_P(v);
+            break;
+        }
+        
+    } ZEND_HASH_FOREACH_END();
+
+    if (amfc_type == FAILURE) {
+        return FAILURE;
+    }
+
+    amf_invoke_serialize_callback(&rval, amfc_type, val, var_hash);
+
+    switch (amfc_type) {
+        case AMFC_DATE:
+            /* handling in here instead of callback 
+            if (!is_userland) {
+                php_date_obj *dateobj = Z_PHPDATE_P(val);
+                int length = 0;
+                char buffer[33];
+                smart_str dts = { 0 };
+                length = slprintf(buffer, 32, "%03d", (int)floor(dateobj->time->f * 1000 + 0.5)); //same as format 'v'
+                smart_str_append_long(&dts, dateobj->time->sse);
+                smart_str_appendl(&dts, buffer, length);
+                smart_str_0(&dts);
+                zend_long dtl = atof(ZSTR_VAL(dts.s));
+                ZVAL_DOUBLE(&rval, dtl);
+                smart_str_free(&dts); 
+            }
+            else {
+                zval rv;
+                zval *timestamp = zend_read_property(Z_OBJCE_P(val), val, "timestamp", sizeof("timestamp") - 1, 0, &rv);
+                zval *milli = zend_read_property(Z_OBJCE_P(val), val, "milli", sizeof("milli") - 1, 0, &rv);
+                smart_str dts = { 0 };
+                / TODO: validate type and value before appending /
+                smart_str_append_long(&dts, Z_DVAL_P(timestamp));
+                smart_str_append_long(&dts, Z_DVAL_P(milli));
+                smart_str_0(&dts);
+                zend_long dtl = atof(ZSTR_VAL(dts.s));
+                ZVAL_DOUBLE(&rval, dtl);
+                smart_str_free(&dts);
+            }*/
+
+            if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_DATE) == FAILURE) {
+                amf_write_byte(buf, AMF3_DATE);
+                amf3_write_uint29(buf, (int)object_index << 1);
+            }
+            else if (Z_TYPE(rval) == IS_DOUBLE) {
+                amf_write_byte(buf, AMF3_DATE);
+                amf3_write_uint29(buf, 1);
+                amf_write_double(buf, Z_DVAL(rval), var_hash);
+            }
+            else {
+                amf_write_byte(buf, AMF3_UNDEFINED);
+                php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_DATE requires a double");
+            }
+            break;
+        case AMFC_BYTEARRAY:
+            if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_BYTEARRAY) == FAILURE) {
+                amf_write_byte(buf, AMF3_BYTEARRAY);
+                amf3_write_uint29(buf, (int)object_index << 1);
+            }
+            else if (Z_TYPE(rval) == IS_STRING) {
+                amf_write_byte(buf, AMF3_BYTEARRAY);
+                amf3_write_string_zval(buf, &rval, var_hash);
+            }
+            else {
+                amf_write_byte(buf, AMF3_UNDEFINED);
+                php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_BYTEARRAY requires a string");
+            }
+            break;
+        case AMFC_XML:
+            if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_XML) == FAILURE) {
+                amf_write_byte(buf, AMF3_XML);
+                amf3_write_uint29(buf, (int)object_index << 1);
+            }
+            else if (Z_TYPE(rval) == IS_STRING) {
+                amf_write_byte(buf, AMF3_XML);
+                amf3_write_string_zval(buf, &rval, var_hash);
+            }
+            else {
+                amf_write_byte(buf, AMF3_UNDEFINED);
+                php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_XML requires a string");
+            }
+            zval_ptr_dtor(&rval);
+        case AMFC_XMLDOCUMENT:
+            if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_XMLDOCUMENT) == FAILURE) {
+                amf_write_byte(buf, AMF3_XMLDOCUMENT);
+                amf3_write_uint29(buf, (int)object_index << 1);
+            }
+            else if (Z_TYPE(rval) == IS_STRING) {
+                amf_write_byte(buf, AMF3_XMLDOCUMENT);
+                amf3_write_string_zval(buf, &rval, var_hash);
+            }
+            else {
+                amf_write_byte(buf, AMF3_UNDEFINED);
+                php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_XMLDOCUMENT requires a string");
+            }
+            zval_ptr_dtor(&rval);
+            break;
+        case AMFC_VECTOR_INT:
+        case AMFC_VECTOR_DOUBLE:
+        case AMFC_VECTOR_UINT:
+        case AMFC_VECTOR_OBJECT:
+            if (amf_cache_object_typed(var_hash, &rval, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_VECTOR_OBJECT) == FAILURE) {
+                amf_write_byte(buf, AMF3_VECTOR_OBJECT);
+                amf3_write_uint29(buf, (int)object_index << 1);
+            }
+            else if (Z_TYPE(rval) == IS_ARRAY) {
+                amf3_serialize_vector(buf, Z_ARRVAL(rval), var_hash);
+            }
+            else if (Z_TYPE(rval) == IS_OBJECT) {
+                amf3_serialize_vector(buf, Z_OBJPROP(rval), var_hash);
+            }
+            else {
+                amf_write_byte(buf, AMF3_UNDEFINED);
+                php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_VECTOR_OBJECT requires an object or an array");
+            }
+            //zval_ptr_dtor(&rval);
+            break;
+    }
+
+    return SUCCESS;
 }
 
 /** */
@@ -1666,6 +1835,7 @@ static void amf3_serialize_vector(amf_serialize_output buf, HashTable *ht, amf_c
 static void amf0_serialize_array(amf_serialize_output buf, HashTable *ht, amf_context_data_t *var_hash);
 static void amf0_serialize_object(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash);
 static void amf0_serialize_object_data(amf_serialize_output buf, HashTable *ht, int is_array, amf_context_data_t *var_hash);
+static int amf0_serialize_specific(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash);
 
 static void amf0_serialize_var(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash)
 {
@@ -1705,7 +1875,7 @@ static void amf0_serialize_var(amf_serialize_output buf, zval *val, amf_context_
             amf0_serialize_object(buf, val, var_hash);
             return;
         case IS_ARRAY: {
-		    /*RReferencing is disabled in arrays for compatibility with efxphp, because
+		    /*Referencing is disabled in arrays for compatibility with efxphp, because
               if the array contains only primitive values,
               then the identity operator === will say that the two arrays are strictly equal
               when they contain the same values, even though they maybe be distinct.*/
@@ -1832,9 +2002,12 @@ static void amf0_serialize_object(amf_serialize_output buf, zval *val, amf_conte
 
     if ((zend_string_equals_literal(Z_OBJCE_P(val)->name, "stdClass") && explicit_type == NULL)
         || (explicit_type != NULL && ZSTR_LEN(explicit_type) == 0)
-    ) {
+        ) {
         amf_write_byte(buf, AMF0_OBJECT);
         amf0_serialize_object_data(buf, Z_OBJPROP_P(val), 0, var_hash);
+    }
+    else if (amf0_serialize_specific(buf, val, var_hash) == SUCCESS) {
+
     }
     else {
         if (amf_cache_object_typed(var_hash, val, &object_index, 0, OCA_LOOKUP_AND_ADD, AMFC_TYPEDOBJECT) == FAILURE) {
@@ -1859,33 +2032,6 @@ static void amf0_serialize_object(amf_serialize_output buf, zval *val, amf_conte
                 amf0_write_shortstring(buf, class_name, var_hash);
                 amf0_serialize_object_data(buf, Z_OBJPROP_P(val), 0, var_hash);
             }
-
-            /*if (strcmp(class_name, "Date") == 0) {
-                zval rv;
-                zval *timestamp = zend_read_property(Z_OBJCE_P(dval), dval, "timestamp", sizeof("timestamp") - 1, 0, &rv);
-                zval *milli = zend_read_property(Z_OBJCE_P(dval), dval, "milli", sizeof("milli") - 1, 0, &rv);
-                smart_str dts = { 0 };
-                smart_str_append_long(&dts, Z_DVAL_P(timestamp));
-                smart_str_append_long(&dts, Z_DVAL_P(milli));
-                zend_long dtl = atof(ZSTR_VAL(dts.s));
-                ZVAL_DOUBLE(&rval, dtl);
-                rtype = AMFC_DATE;
-                smart_str_free(&dts);
-            }
-            else if (strcmp(class_name, "DateTime") == 0) {
-                php_date_obj *dateobj = Z_PHPDATE_P(dval);
-                int length = 0;
-                char buffer[33];
-                smart_str dts = { 0 };
-                length = slprintf(buffer, 32, "%03d", (int)floor(dateobj->time->f * 1000 + 0.5)); //same as format 'v'
-                smart_str_append_long(&dts, dateobj->time->sse);
-                smart_str_appendl(&dts, buffer, length);
-                zend_long dtl = atof(ZSTR_VAL(dts.s));
-                ZVAL_DOUBLE(&rval, dtl);
-                rtype = AMFC_DATE;
-                smart_str_free(&dts);
-            }
-            else {*/
 
             if (class_name) {
                 zend_string_release(class_name);
@@ -1934,6 +2080,79 @@ static void amf0_serialize_object_data(amf_serialize_output buf, HashTable *ht, 
     amf0_write_objectend(buf);
 }
 
+static int amf0_serialize_specific(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash)
+{
+    int amfc_type = FAILURE, is_userland = 0;
+    zval rval;
+    uint32_t object_index = 0;
+    zend_string *class_name = NULL;
+    class_name = zend_string_copy(Z_OBJCE_P(val)->name);
+
+    if (zend_string_equals_literal(class_name, "DateTime")) {
+        amfc_type = AMFC_DATE;
+    }
+    else if (zend_string_equals_literal(class_name, "SimpleXMLElement")) {
+        amfc_type = AMFC_XML;
+    }
+    else if (zend_string_equals_literal(class_name, "DOMElement")) {
+        amfc_type = AMFC_XMLDOCUMENT;
+    }
+    else {
+        is_userland = 1;
+    }
+
+    HashTable *ht = AMF_G(userland_types);
+    zend_string *k;
+    zval *v;
+
+    ZEND_HASH_FOREACH_STR_KEY_VAL(ht, k, v) {
+        if (!k || Z_TYPE_P(v) != IS_LONG || Z_LVAL_P(v) < 0 || Z_LVAL_P(v) > 8) {
+            continue;
+        }
+
+        if (zend_string_equals(class_name, k)) {
+            amfc_type = (int)Z_LVAL_P(v);
+            break;
+        }
+
+    } ZEND_HASH_FOREACH_END();
+
+    zend_string_release(class_name);
+    if (amfc_type == FAILURE) {
+        return FAILURE;
+    }
+
+    amf_invoke_serialize_callback(&rval, amfc_type, val, var_hash);
+
+    switch (amfc_type) {
+        case AMFC_DATE:
+            if (Z_TYPE(rval) == IS_DOUBLE) {
+                amf_write_byte(buf, AMF0_DATE);
+                amf_write_double(buf, Z_DVAL(rval), var_hash);
+                amf0_write_short(buf, 0);
+            }
+            else {
+                amf_write_byte(buf, AMF0_UNDEFINED);
+                php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_DATE requires a double");
+            }
+            break;
+        case AMFC_XML:
+        case AMFC_XMLDOCUMENT:
+            if (Z_STRLEN(rval) > AMF_U32_MAX) {
+                zval_ptr_dtor(&rval);
+                php_error_docref(NULL, E_NOTICE, "amf0 cannot write xml strings longer than %d", AMF_U32_MAX);
+                return;
+            }
+            amf_write_byte(buf, AMF0_XML);
+            amf0_write_int(buf, (int)Z_STRLEN(rval));
+            amf_write_string_zval(buf, &rval);
+            zval_ptr_dtor(&rval);
+            break;
+    }
+
+    return SUCCESS;
+}
+
 /**
  * encodes a string into amf format
  * \param value to be ancoded
@@ -1943,7 +2162,7 @@ static void amf0_serialize_object_data(amf_serialize_output buf, HashTable *ht, 
 PHP_FUNCTION(amf_encode)
 {
     amf_context_data_t var_hash;
-    zval *val = NULL, *zFlags;
+    zval *val = NULL, *zFlags, *zUsrTypes;
     int flags = 0;
     
 #ifdef amf_USE_STRING_BUILDER
@@ -1954,31 +2173,31 @@ PHP_FUNCTION(amf_encode)
     amf_serialize_output pbuf = php_stream_memory_create(0);
 #endif
 
-    switch (ZEND_NUM_ARGS()) {
-        case 0:
-            WRONG_PARAM_COUNT;
-            return;
-        case 1:
-            if (zend_parse_parameters(1, "z", &val) == FAILURE) {
-                WRONG_PARAM_COUNT;
-            }
-            break;
-        case 2:
-            if (zend_parse_parameters(2, "zz", &val, &zFlags) == FAILURE) {
-                WRONG_PARAM_COUNT;
-            }
-            convert_to_long_ex(zFlags);
-            flags = (int)Z_LVAL_P(zFlags);
-            break;
-        default:
-            if (zend_parse_parameters((ZEND_NUM_ARGS() > 4 ? 4 : ZEND_NUM_ARGS()), "zz|f", &val, &zFlags, &(var_hash.fci), &(var_hash.fci_cache)) == FAILURE || Z_TYPE_P(zFlags) != IS_LONG) {
-                WRONG_PARAM_COUNT;
-            }
-            convert_to_long_ex(zFlags);
-            flags = (int)Z_LVAL_P(zFlags);
-            break;
+    if (ZEND_NUM_ARGS() != 4) {
+        WRONG_PARAM_COUNT;
+        return;
     }
+
+    if (zend_parse_parameters(4, "zzzf", &val, &zFlags, &zUsrTypes, &(var_hash.fci), &(var_hash.fci_cache)) == FAILURE) {
+        php_error_docref(NULL, E_NOTICE, "amf_encode could not parse parameters, expected 4 arguments: (mixed)input, (long)encode_flags, (array)userland_types, (callable)callback");
+        RETURN_FALSE;
+    }
+
+    if (Z_TYPE_P(zFlags) != IS_LONG) {
+        php_error_docref(NULL, E_NOTICE, "amf_encode argument 3 must a long");
+        RETURN_FALSE;
+    }
+
+    if (Z_TYPE_P(zUsrTypes) != IS_ARRAY) {
+        php_error_docref(NULL, E_NOTICE, "amf_encode argument 4 must be an array");
+        RETURN_FALSE;
+    }
+
+    convert_to_long_ex(zFlags);
+    flags = (int)Z_LVAL_P(zFlags);
     var_hash.flags = flags;
+
+    AMF_G(userland_types) = Z_ARRVAL_P(zUsrTypes);
     
     amf_SERIALIZE_CTOR(var_hash)
     if ((flags & AMF_AMF3) != 0) {
@@ -2204,12 +2423,12 @@ static double amf3_read_vector_double(const unsigned char **p, const unsigned ch
     return d.dval;
 }
 
-static int amf_invoke_deserialize_callback(zval *rval, int evt, zval *arg, int shared, amf_context_data_t *var_hash)
+static int amf_invoke_deserialize_callback(zval *rval, int amfc_type, zval *arg, int shared, amf_context_data_t *var_hash)
 {
     int result;
     zval params[2];
 
-    ZVAL_LONG(&params[0], evt);
+    ZVAL_LONG(&params[0], amfc_type);
 
     if (arg == NULL) {
         ZVAL_NULL(&params[1]);
@@ -2234,6 +2453,26 @@ static int amf_invoke_deserialize_callback(zval *rval, int evt, zval *arg, int s
     zval_ptr_dtor(&params[1]);
 
     return result;
+}
+
+static zend_string *get_userland_type(int rtype)
+{
+    HashTable *ht = AMF_G(userland_types);
+    zend_string *k;
+    zval *v;
+
+    ZEND_HASH_FOREACH_STR_KEY_VAL(ht, k, v) {
+        if (!k || Z_TYPE_P(v) != IS_LONG || Z_LVAL_P(v) < 1 || Z_LVAL_P(v) > 11) {
+            continue;
+        }
+
+        if (Z_LVAL_P(v) == rtype) {
+            return k;
+        }
+
+    } ZEND_HASH_FOREACH_END();
+
+    return NULL;
 }
 
 /**
@@ -2274,13 +2513,13 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
         case AMF3_BYTEARRAY:
             handle = amf3_read_uint29(p, max, var_hash);
             if ((handle & AMF_INLINE_ENTITY) != 0) {
-                int event = type == AMF3_BYTEARRAY ? AMFE_POST_BYTEARRAY : type == AMF3_XML ? AMFE_POST_XML : AMFE_POST_XMLDOCUMENT;
+                int amfc_type = type == AMF3_BYTEARRAY ? AMFC_BYTEARRAY : type == AMF3_XML ? AMFC_XML : AMFC_XMLDOCUMENT;
                 if (amf_read_string(rval, p, max, handle >> 1, var_hash) == FAILURE) {
                     const char *name = type == AMF3_BYTEARRAY ? "bytearray" : "xmlstring";
                     php_error_docref(NULL, E_NOTICE, "amf cannot read string for %s", name);
                     return FAILURE;
                 }
-                amf_invoke_deserialize_callback(rval, event, rval, 1, var_hash);
+                amf_invoke_deserialize_callback(rval, amfc_type, rval, 1, var_hash);
                 amf_put_in_cache(&(var_hash->objects), rval);
             }
             else {
@@ -2296,8 +2535,71 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
             handle = amf3_read_uint29(p, max, var_hash);
             if ((handle & AMF_INLINE_ENTITY) != 0) {
                 double d = amf_read_double(p, max, var_hash);
-                ZVAL_DOUBLE(rval, d);
-                amf_invoke_deserialize_callback(rval, AMFE_POST_DATE, rval, 1, var_hash);
+				ZVAL_DOUBLE(rval, d);
+                amf_invoke_deserialize_callback(rval, AMFC_DATE, rval, 1, var_hash);
+
+				/*
+                ulong ts, ml;
+                char n[50];
+                sprintf(n, "%lf", d / 1000);
+                sscanf(n, "%d.%3d", &ts, &ml);
+                zval timestamp, milli;
+                ZVAL_DOUBLE(&timestamp, ts);
+                ZVAL_DOUBLE(&milli, ml);
+                
+                zend_class_entry *ce = NULL;
+                zend_string *class_name = NULL;
+
+                if ((var_hash->flags & AMF_USE_RLAND_DATE) != 0 && (class_name = get_userland_type(AMFC_DATE)) != NULL) {
+                    if ((ce = zend_lookup_class(class_name)) != NULL) {
+                        object_init_ex(rval, ce);
+                        zend_update_property(Z_OBJCE_P(rval), rval, "timestamp", sizeof("timestamp") - 1, &timestamp);
+                        zend_update_property(Z_OBJCE_P(rval), rval, "milli", sizeof("milli") - 1, &milli);
+                    }
+                    else {
+                        //TODO: make a date string
+                    }
+                }
+                else {
+                    zend_class_entry *tzce;
+                    zend_string *tz_class_name;
+                    zend_string *datestr = php_format_date("Y-m-d H:i:s.", sizeof("Y-m-d H:i:s.") - 1, ts, 0);
+                    size_t original_length = ZSTR_LEN(datestr);
+                    datestr = zend_string_extend(datestr, original_length + 3, 0);
+                    sprintf(n, "%3d", ml);
+                    memcpy(ZSTR_VAL(datestr) + original_length, n, 3);
+                    ZSTR_VAL(datestr)[ZSTR_LEN(datestr)] = '\0';
+                    zend_string_forget_hash_val(datestr);
+
+                    tz_class_name = zend_string_init("DateTimeZone", sizeof("DateTimeZone") - 1, 0);
+                    class_name = zend_string_init("DateTime", sizeof("DateTime") - 1, 0);
+                    if ((ce = zend_lookup_class(class_name)) != NULL && (tzce = zend_lookup_class(tz_class_name)) != NULL) {
+                        timelib_tzinfo   *tzi;
+                        php_timezone_obj *tzobj;
+                        zval ztzobj;
+
+                        object_init_ex(rval, ce);
+                        tzi = get_timezone_info();
+                        object_init_ex(&ztzobj, tzce);
+                        tzobj = Z_PHPTIMEZONE_P(&ztzobj);
+                        tzobj->type = TIMELIB_ZONETYPE_ID;
+                        tzobj->tzi.tz = tzi;
+                        tzobj->initialized = 1;
+
+                        if (!php_date_initialize(Z_PHPDATE_P(rval), ZSTR_VAL(datestr), ZSTR_LEN(datestr), NULL, &ztzobj, 0)) {
+
+                        }
+
+                        zval_ptr_dtor(&ztzobj);
+                    }
+                    else {
+                        //TODO: make a date string
+                    }
+                    zend_string_release(tz_class_name);
+                    zend_string_release(class_name);
+                    zend_string_release(datestr);
+                }*/
+
                 amf_put_in_cache(&(var_hash->objects), rval);
             }
             else {
@@ -2546,11 +2848,11 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                         Z_ADDREF(explicit_type);
                     }
                 }
-                else if ((var_hash->flags & AMF_POST_DECODE) != 0) {
-                    /* TODO: change post decode to execute a method of typed objects only
+                /*else if ((var_hash->flags & AMF_POST_DECODE) != 0) {
+                     TODO: change post decode to execute a method of typed objects only
                     amf_invoke_deserialize_callback(rval, AMFE_POST_OBJECT, rval, 0, var_hash);
-                    */
-                }
+                    
+                }*/
 
                 zval_ptr_dtor(&explicit_type);
             }
@@ -2573,7 +2875,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                 ZVAL_BOOL(&zvVectorFixed, *cp++);
                 *p = cp;
 
-                amf_invoke_deserialize_callback(rval, AMFE_VECTOR_INT, rval, 1, var_hash);
+                amf_invoke_deserialize_callback(rval, AMFC_VECTOR_INT, rval, 1, var_hash);
                 amf_put_in_cache(&(var_hash->objects), rval);
                 
                 array_init_size(&zvVectorData, vectorLen);
@@ -2606,7 +2908,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                 ZVAL_BOOL(&zvVectorFixed, *cp++);
                 *p = cp;
 
-                amf_invoke_deserialize_callback(rval, AMFE_VECTOR_UINT, rval, 1, var_hash);
+                amf_invoke_deserialize_callback(rval, AMFC_VECTOR_UINT, rval, 1, var_hash);
                 amf_put_in_cache(&(var_hash->objects), rval);
 
                 array_init_size(&zvVectorData, vectorLen);
@@ -2644,7 +2946,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                 ZVAL_BOOL(&zvVectorFixed, *cp++);
                 *p = cp;
 
-                amf_invoke_deserialize_callback(rval, AMFE_VECTOR_DOUBLE, rval, 1, var_hash);
+                amf_invoke_deserialize_callback(rval, AMFC_VECTOR_DOUBLE, rval, 1, var_hash);
                 amf_put_in_cache(&(var_hash->objects), rval);
 
                 array_init_size(&zvVectorData, vectorLen);
@@ -2685,7 +2987,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                     break;
                 }
 
-                amf_invoke_deserialize_callback(rval, AMFE_VECTOR_OBJECT, rval, 1, var_hash);
+                amf_invoke_deserialize_callback(rval, AMFC_VECTOR_OBJECT, rval, 1, var_hash);
                 amf_put_in_cache(&(var_hash->objects), rval);
 
                 array_init_size(&zvVectorData, vectorLen);
@@ -2743,7 +3045,7 @@ static int amf0_deserialize_var(zval *rval, const unsigned char **p, const unsig
             double d = amf_read_double(p, max, var_hash);
             amf_read_short(p, max, var_hash);
             ZVAL_DOUBLE(rval, d);
-            amf_invoke_deserialize_callback(rval, AMFE_POST_DATE, rval, 0, var_hash);
+            amf_invoke_deserialize_callback(rval, AMFC_DATE, rval, 0, var_hash);
         }   break;
         case AMF0_STRING:
             return amf0_read_string(rval, p, max, 2, var_hash);
@@ -2804,7 +3106,7 @@ static int amf0_deserialize_var(zval *rval, const unsigned char **p, const unsig
             if (amf0_read_string(rval, p, max, 4, var_hash) == FAILURE) {
                 return FAILURE;
             }
-            amf_invoke_deserialize_callback(rval, AMFE_POST_XML, rval, 0, var_hash);
+            amf_invoke_deserialize_callback(rval, AMFC_XML, rval, 0, var_hash);
             break;
         case AMF0_AMF3:
             var_hash->flags |= AMF_AMF3;
@@ -2830,7 +3132,7 @@ static int amf0_read_object_data(zval *rval, const unsigned char **p, const unsi
         && !php_memnstr(Z_STRVAL_P(explicit_type), "flex\\messaging\\messages\\", sizeof("flex\\messaging\\messages\\") - 1, Z_STRVAL_P(explicit_type) + Z_STRLEN_P(explicit_type)))
     ) {
         if (as_array == 1 || (var_hash->flags & AMF_OBJECT_AS_ASSOC) != 0) {
-            zval_ptr_dtor(rval); //removes three memory leaks, but introduces one wrong decode
+            zval_ptr_dtor(rval);
             array_init_size(rval, max_index);
             as_array = 1;
             output = Z_ARRVAL_P(rval);
@@ -2919,81 +3221,71 @@ static int amf0_read_object_data(zval *rval, const unsigned char **p, const unsi
             Z_ADDREF_P(explicit_type);
         }
     }
-    else if ((var_hash->flags & AMF_POST_DECODE) != 0) {
-        /* TODO: change post decode to execute a method of typed objects only
+    /*else if ((var_hash->flags & AMF_POST_DECODE) != 0) {
+         TODO: change post decode to execute a method of typed objects only
         amf_invoke_deserialize_callback(rval, AMFE_POST_OBJECT, rval, 0, var_hash);
-        */
-    }
+        
+    }*/
     return SUCCESS;
 }
-
 
 PHP_FUNCTION(amf_decode)
 {
     amf_context_data_t var_hash;
-    zval *zInput = NULL, *zFlags = NULL, *zOffset = NULL;
+    zval *zInput = NULL, *zFlags = NULL, *zOffset = NULL, *zUsrTypes = NULL;
     int offset = 0;
     int flags = 0;
     
-    switch (ZEND_NUM_ARGS()) {
-        case 0:
-            WRONG_PARAM_COUNT;
-            return;
-        case 1:
-            if (zend_parse_parameters(1, "z", &zInput) == FAILURE) {
-                WRONG_PARAM_COUNT;
-            }
-            break;
-        case 2:
-            if (zend_parse_parameters(2, "zz", &zInput, &zFlags) == FAILURE) {
-                WRONG_PARAM_COUNT;
-            }
-            convert_to_long_ex(zFlags);
-            flags = (int)Z_LVAL_P(zFlags);
-            break;
-        default:
-            if (zend_parse_parameters((ZEND_NUM_ARGS() > 3 ? 4 : 3), "zzz/|f", &zInput, &zFlags, &zOffset, &(var_hash.fci), &(var_hash.fci_cache)) == FAILURE) {
-                WRONG_PARAM_COUNT;
-            }
-            convert_to_long_ex(zFlags);
-            convert_to_long_ex(zOffset);
-            flags = (int)Z_LVAL_P(zFlags);
-            offset = (int)Z_LVAL_P(zOffset);
-            break;
+    if (ZEND_NUM_ARGS() != 5) {
+        WRONG_PARAM_COUNT;
     }
-    var_hash.flags = flags;
 
-    if (Z_TYPE_P(zInput) == IS_STRING) {
-        const unsigned char *p = (unsigned char *)Z_STRVAL_P(zInput) + offset;
-        const unsigned char *p0 = p;
-        ZVAL_NULL(return_value);
-
-        if (Z_STRLEN_P(zInput) == 0) {
-            RETURN_FALSE;
-        }
-
-        amf_DESERIALIZE_CTOR(var_hash);
-
-        if (amf0_deserialize_var(return_value, &p, p + Z_STRLEN_P(zInput) - offset, &var_hash) == FAILURE) {
-            amf_DESERIALIZE_DTOR(var_hash);
-            php_error_docref(NULL, E_NOTICE, "Error at offset %ld of %d bytes", (long)((char *)p - Z_STRVAL_P(zInput)), Z_STRLEN_P(zInput));
-            RETURN_FALSE;
-        }
-        if (zFlags != NULL) {
-            zval_dtor(zFlags);
-            ZVAL_LONG(zFlags, var_hash.flags);
-        }
-        if (zOffset != NULL) {
-            zval_dtor(zOffset);
-            ZVAL_LONG(zOffset, offset + p - p0);
-        }
-
-        amf_DESERIALIZE_DTOR(var_hash);
-    }
-    else {
-        php_error_docref(NULL, E_NOTICE, "amf_decode requires a string argument");
+    if (zend_parse_parameters(5, "zz/zzf", &zInput, &zOffset, &zFlags, &zUsrTypes, &(var_hash.fci), &(var_hash.fci_cache)) == FAILURE) {
+        php_error_docref(NULL, E_NOTICE, "amf_decode could not parse parameters, expected 4 arguments: (string)input, (long)position, (long)decode_flags, (array)userland_types, (callable)callback");
         RETURN_FALSE;
     }
+
+    if (Z_TYPE_P(zInput) != IS_STRING || Z_STRLEN_P(zInput) == 0) {
+        php_error_docref(NULL, E_NOTICE, "amf_decode argument 1 must be a string");
+        RETURN_FALSE;
+    }
+
+    if (Z_TYPE_P(zFlags) != IS_LONG) {
+        php_error_docref(NULL, E_NOTICE, "amf_decode argument 3 must a long");
+        RETURN_FALSE;
+    }
+
+    if (Z_TYPE_P(zUsrTypes) != IS_ARRAY) {
+        php_error_docref(NULL, E_NOTICE, "amf_decode argument 4 must be an array");
+        RETURN_FALSE;
+    }
+
+    convert_to_long_ex(zFlags);
+    convert_to_long_ex(zOffset);
+    flags = (int)Z_LVAL_P(zFlags);
+    offset = (int)Z_LVAL_P(zOffset);
+    var_hash.flags = flags;
+
+    AMF_G(userland_types) = Z_ARRVAL_P(zUsrTypes);
+    
+    const unsigned char *p = (unsigned char *)Z_STRVAL_P(zInput) + offset;
+    const unsigned char *p0 = p;
+    ZVAL_NULL(return_value);
+
+    amf_DESERIALIZE_CTOR(var_hash);
+
+    if (amf0_deserialize_var(return_value, &p, p + Z_STRLEN_P(zInput) - offset, &var_hash) == FAILURE) {
+        amf_DESERIALIZE_DTOR(var_hash);
+        php_error_docref(NULL, E_NOTICE, "Error at offset %ld of %d bytes", (long)((char *)p - Z_STRVAL_P(zInput)), Z_STRLEN_P(zInput));
+        RETURN_FALSE;
+    }
+        
+    if (zOffset != NULL) {
+        zval_dtor(zOffset);
+        ZVAL_LONG(zOffset, offset + p - p0);
+    }
+
+    amf_DESERIALIZE_DTOR(var_hash);
 }
 
 /* }}} */

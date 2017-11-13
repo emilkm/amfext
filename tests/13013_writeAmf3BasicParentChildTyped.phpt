@@ -1,5 +1,5 @@
 --TEST--
-Write AMF3 parent child typd
+Write AMF3 parent child typed
 --DESCRIPTION--
 Writes a basic parent child typed in AMF3 format.
 
