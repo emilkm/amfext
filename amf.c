@@ -1714,7 +1714,7 @@ static int amf3_serialize_specific(amf_serialize_output buf, zval *val, amf_cont
                 amf_write_byte(buf, AMF3_UNDEFINED);
                 php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_VECTOR_OBJECT requires an object or an array");
             }
-            //zval_ptr_dtor(&rval);
+            zval_ptr_dtor(&rval);
             break;
     }
 
