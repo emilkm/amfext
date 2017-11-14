@@ -2087,7 +2087,6 @@ static int amf0_serialize_specific(amf_serialize_output buf, zval *val, amf_cont
 {
     int amfc_type = FAILURE;
     zval rval;
-    uint32_t object_index = 0;
     zend_string *class_name = NULL;
     class_name = zend_string_copy(Z_OBJCE_P(val)->name);
 
@@ -2136,6 +2135,7 @@ static int amf0_serialize_specific(amf_serialize_output buf, zval *val, amf_cont
             else {
                 amf_write_byte(buf, AMF0_UNDEFINED);
                 php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_DATE requires a double");
+                return FAILURE;
             }
             break;
         case AMFC_XML:
@@ -2143,7 +2143,7 @@ static int amf0_serialize_specific(amf_serialize_output buf, zval *val, amf_cont
             if (Z_STRLEN(rval) > AMF_U32_MAX) {
                 zval_ptr_dtor(&rval);
                 php_error_docref(NULL, E_NOTICE, "amf0 cannot write xml strings longer than %d", AMF_U32_MAX);
-                return;
+                return FAILURE;
             }
             amf_write_byte(buf, AMF0_XML);
             amf0_write_int(buf, (int)Z_STRLEN(rval));
