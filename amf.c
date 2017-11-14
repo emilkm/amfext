@@ -18,12 +18,14 @@
 #endif
 
 #include "php.h"
+#include "php_amf.h"
 #include "ext/standard/info.h"
 #include "ext/standard/php_string.h"
 #include "ext/pcre/php_pcre.h"
 #include "ext/date/php_date.h"
 #include "zend_smart_str.h"
-#include "php_amf.h"
+#include "ext/standard/php_mt_rand.h"
+
 
 #ifdef COMPILE_DL_AMF
 ZEND_GET_MODULE(amf)
@@ -1173,6 +1175,29 @@ static zend_string *amf_get_explicit_type(zval *val)
     return explicit_type;
 }
 
+static int get_userland_type(zend_string *class_name)
+{
+    int amfc_type = FAILURE;
+
+    HashTable *ht = AMF_G(userland_types);
+    zend_string *k;
+    zval *v;
+
+    ZEND_HASH_FOREACH_STR_KEY_VAL(ht, k, v) {
+        if (!k || Z_TYPE_P(v) != IS_LONG || Z_LVAL_P(v) < 0 || Z_LVAL_P(v) > 8) {
+            continue;
+        }
+
+        if (zend_string_equals(class_name, k)) {
+            amfc_type = (int)Z_LVAL_P(v);
+            break;
+        }
+
+    } ZEND_HASH_FOREACH_END();
+
+    return amfc_type;
+}
+
 static void amf3_serialize_array(amf_serialize_output buf, HashTable *ht, amf_context_data_t *var_hash);
 static void amf3_serialize_object(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash);
 static void amf3_serialize_object_anonymous(amf_serialize_output buf, HashTable *ht, amf_context_data_t *var_hash);
@@ -1585,21 +1610,7 @@ static int amf3_serialize_specific(amf_serialize_output buf, zval *val, amf_cont
     }
 
     if (amfc_type == FAILURE) {
-        HashTable *ht = AMF_G(userland_types);
-        zend_string *k;
-        zval *v;
-
-        ZEND_HASH_FOREACH_STR_KEY_VAL(ht, k, v) {
-            if (!k || Z_TYPE_P(v) != IS_LONG || Z_LVAL_P(v) < 0 || Z_LVAL_P(v) > 8) {
-                continue;
-            }
-
-            if (zend_string_equals(class_name, k)) {
-                amfc_type = (int)Z_LVAL_P(v);
-                break;
-            }
-
-        } ZEND_HASH_FOREACH_END();
+        amfc_type = get_userland_type(class_name);
     }
 
     zend_string_release(class_name);
@@ -2101,21 +2112,7 @@ static int amf0_serialize_specific(amf_serialize_output buf, zval *val, amf_cont
     }
 
     if (amfc_type == FAILURE) {
-        HashTable *ht = AMF_G(userland_types);
-        zend_string *k;
-        zval *v;
-
-        ZEND_HASH_FOREACH_STR_KEY_VAL(ht, k, v) {
-            if (!k || Z_TYPE_P(v) != IS_LONG || Z_LVAL_P(v) < 0 || Z_LVAL_P(v) > 8) {
-                continue;
-            }
-
-            if (zend_string_equals(class_name, k)) {
-                amfc_type = (int)Z_LVAL_P(v);
-                break;
-            }
-
-        } ZEND_HASH_FOREACH_END();
+        amfc_type = get_userland_type(class_name);
     }
 
     zend_string_release(class_name);
@@ -2455,26 +2452,6 @@ static int amf_invoke_deserialize_callback(zval *rval, int amfc_type, zval *arg,
     zval_ptr_dtor(&params[1]);
 
     return result;
-}
-
-static zend_string *get_userland_type(int rtype)
-{
-    HashTable *ht = AMF_G(userland_types);
-    zend_string *k;
-    zval *v;
-
-    ZEND_HASH_FOREACH_STR_KEY_VAL(ht, k, v) {
-        if (!k || Z_TYPE_P(v) != IS_LONG || Z_LVAL_P(v) < 1 || Z_LVAL_P(v) > 11) {
-            continue;
-        }
-
-        if (Z_LVAL_P(v) == rtype) {
-            return k;
-        }
-
-    } ZEND_HASH_FOREACH_END();
-
-    return NULL;
 }
 
 /**
