@@ -1821,7 +1821,10 @@ static void amf3_serialize_vector(amf_serialize_output buf, HashTable *ht, amf_c
                 }
                 amf3_write_string_zstr(buf, class_name, var_hash);
                 zend_string_release(class_name);
-                zend_string_release(explicit_type);
+
+                if (explicit_type != NULL) {
+                    zend_string_release(explicit_type);
+                }
 
                 amf3_serialize_object(buf, val, var_hash);
             }
@@ -2993,6 +2996,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
 
                 for (iIndex = 0; iIndex < vectorLen; iIndex++) {
                     zval newval;
+                    ZVAL_NULL(&newval);
                     if (amf3_deserialize_var(&newval, p, max, var_hash) == FAILURE) {
                         zval_ptr_dtor(&newval);
                         php_error_docref(NULL, E_NOTICE, "amf cannot deserialize array item %d", iIndex);

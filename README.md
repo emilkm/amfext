@@ -36,7 +36,7 @@ For PHP5 see the `php56` branch.
 
 # TODO
 
-* Re-add support for XML, XML Document, and Vector types.
+* Re-add support for XML, XML Document.
 * Write docs.
 * ...
 
