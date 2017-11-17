@@ -1,5 +1,5 @@
 --TEST--
-Read AMF0 Date 
+Read AMF0 Date
 --DESCRIPTION--
 Reads a date in AMF0 format.
 
@@ -13,11 +13,11 @@ include 'amf_decoder.inc';
 $decoder = new AmfDecoder();
 $data = unserialize(file_get_contents(__DIR__ . '/asset/value/date.amf0'));
 $decoder->setData($data);
-$decoder->setUseInternalDateType(true);
+$decoder->setUseRlandDateType(true);
 $obj = $decoder->run();
 var_dump($obj->value);
 $decoder->pos = 0;
-$decoder->setUseInternalDateType(false);
+$decoder->setUseRlandDateType(false);
 $obj = $decoder->run();
 var_dump($obj->value);
 ?>
