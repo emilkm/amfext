@@ -140,7 +140,7 @@ enum AMF0Codes { AMF0_NUMBER, AMF0_BOOLEAN, AMF0_STRING, AMF0_OBJECT, AMF0_MOVIE
 enum AMF3Codes { AMF3_UNDEFINED, AMF3_NULL, AMF3_FALSE, AMF3_TRUE, AMF3_INTEGER, AMF3_NUMBER, AMF3_STRING, AMF3_XMLDOCUMENT, AMF3_DATE, AMF3_ARRAY, AMF3_OBJECT, AMF3_XML, AMF3_BYTEARRAY, AMF3_VECTOR_INT, AMF3_VECTOR_UINT, AMF3_VECTOR_DOUBLE, AMF3_VECTOR_OBJECT };
 
 /** types handled by callbacks */
-enum AMFCallbackTypes { AMFC_DATE, AMFC_BYTEARRAY, AMFC_XML, AMFC_XMLDOCUMENT, AMFC_VECTOR_INT, AMFC_VECTOR_UINT, AMFC_VECTOR_DOUBLE, AMFC_VECTOR_OBJECT, AMFC_EXTERNALIZABLE, AMFC_OBJECT, AMFC_TYPEDOBJECT };
+enum AMFCTypes { AMFC_DATE, AMFC_BYTEARRAY, AMFC_XML, AMFC_XMLDOCUMENT, AMFC_VECTOR, AMFC_EXTERNALIZABLE, AMFC_OBJECT, AMFC_TYPEDOBJECT };
 
 /** flags passed to amf_encode and amf_decode */
 enum AMFFlags { AMF_AMF3 = 1, AMF_BIGENDIAN = 2, AMF_OBJECT_AS_ASSOC = 4, AMF3_NSND_ARRAY_AS_OBJECT = 8, AMF_USE_RLAND_DATE = 16, AMF_USE_RLAND_XML = 32, AMF_USE_RLAND_XMLDOCUMENT = 64 };
@@ -1101,7 +1101,7 @@ static inline void amf3_write_head(amf_serialize_output buf, zval *amfc_type, in
             case AMFC_XMLDOCUMENT:
                 amf_write_byte(buf, AMF3_XMLDOCUMENT);
                 break;
-            case AMFC_VECTOR_OBJECT:
+            case AMFC_VECTOR:
                 amf_write_byte(buf, AMF3_VECTOR_OBJECT);
                 break;
             default:
@@ -1156,7 +1156,7 @@ static int get_userland_amfc_type(zend_string *class_name)
     zval *v;
 
     ZEND_HASH_FOREACH_STR_KEY_VAL(ht, k, v) {
-        if (!k || Z_TYPE_P(v) != IS_LONG || Z_LVAL_P(v) < 0 || Z_LVAL_P(v) > 8) {
+        if (!k || Z_TYPE_P(v) != IS_LONG || Z_LVAL_P(v) < 0 || Z_LVAL_P(v) > AMFC_EXTERNALIZABLE) {
             continue;
         }
 
@@ -1177,7 +1177,7 @@ static zend_string *get_userland_class_name(int amfc_type)
     zval *v;
 
     ZEND_HASH_FOREACH_STR_KEY_VAL(ht, k, v) {
-        if (!k || Z_TYPE_P(v) != IS_LONG || Z_LVAL_P(v) < 0 || Z_LVAL_P(v) > 8) {
+        if (!k || Z_TYPE_P(v) != IS_LONG || Z_LVAL_P(v) < 0 || Z_LVAL_P(v) > AMFC_EXTERNALIZABLE) {
             continue;
         }
 
@@ -1663,7 +1663,7 @@ static int amf3_serialize_specific(amf_serialize_output buf, zval *val, amf_cont
             }
             else {
                 amf_write_byte(buf, AMF3_UNDEFINED);
-                php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_DATE requires a double");
+                php_error_docref(NULL, E_NOTICE, "amf encoding AMFC_DATE requires a double");
             }
             break;
         case AMFC_BYTEARRAY: {
@@ -1680,7 +1680,7 @@ static int amf3_serialize_specific(amf_serialize_output buf, zval *val, amf_cont
             }
             else {
                 amf_write_byte(buf, AMF3_UNDEFINED);
-                php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_BYTEARRAY requires a string");
+                php_error_docref(NULL, E_NOTICE, "amf encoding AMFC_BYTEARRAY requires a string");
             }
         }    break;
         /*case AMFC_XML:
@@ -1694,7 +1694,7 @@ static int amf3_serialize_specific(amf_serialize_output buf, zval *val, amf_cont
             }
             else {
                 amf_write_byte(buf, AMF3_UNDEFINED);
-                php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_XML requires a string");
+                php_error_docref(NULL, E_NOTICE, "amf encoding AMFC_XML requires a string");
             }
             zval_ptr_dtor(&rval);
         case AMFC_XMLDOCUMENT:
@@ -1708,31 +1708,23 @@ static int amf3_serialize_specific(amf_serialize_output buf, zval *val, amf_cont
             }
             else {
                 amf_write_byte(buf, AMF3_UNDEFINED);
-                php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_XMLDOCUMENT requires a string");
-            }
-            zval_ptr_dtor(&rval);
-            break;
-        case AMFC_VECTOR_INT:
-        case AMFC_VECTOR_DOUBLE:
-        case AMFC_VECTOR_UINT:
-        case AMFC_VECTOR_OBJECT:
-            
-            if (amf_cache_object_typed(var_hash, &rval, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_VECTOR_OBJECT) == FAILURE) {
-                amf_write_byte(buf, AMF3_VECTOR_OBJECT);
-                amf3_write_uint29(buf, (int)object_index << 1);
-            }
-            else if (Z_TYPE(rval) == IS_ARRAY) {
-                amf3_serialize_vector(buf, Z_ARRVAL(rval), var_hash);
-            }
-            else if (Z_TYPE(rval) == IS_OBJECT) {
-                amf3_serialize_vector(buf, Z_OBJPROP(rval), var_hash);
-            }
-            else {
-                amf_write_byte(buf, AMF3_UNDEFINED);
-                php_error_docref(NULL, E_NOTICE, "amf encoding callback. AMFC_VECTOR_OBJECT requires an object or an array");
+                php_error_docref(NULL, E_NOTICE, "amf encoding AMFC_XMLDOCUMENT requires a string");
             }
             zval_ptr_dtor(&rval);
             break;*/
+        case AMFC_VECTOR:
+            if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_VECTOR) == FAILURE) {
+                amf_write_byte(buf, AMF3_VECTOR_OBJECT);
+                amf3_write_uint29(buf, (int)object_index << 1);
+            }
+            else if (Z_TYPE_P(val) == IS_OBJECT) {
+                amf3_serialize_vector(buf, Z_OBJPROP_P(val), var_hash);
+            }
+            else {
+                amf_write_byte(buf, AMF3_UNDEFINED);
+                php_error_docref(NULL, E_NOTICE, "amf encoding AMFC_VECTOR_OBJECT requires an object");
+            }
+            break;
     }
 
     return SUCCESS;
@@ -2872,20 +2864,19 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                 zval_add_ref(rval);
             }
             break;
-            /*case AMF3_VECTOR_INT:
+        case AMF3_VECTOR_INT:
             handle = amf3_read_uint29(p, max, var_hash);
             if ((handle & AMF_INLINE_ENTITY) != 0) {
                 const unsigned char *cp = *p;
                 int iIndex;
                 int vectorLen = handle >> 1;
-                zval zvVectorData, zvVectorFixed;
+                zval zvVectorType, zvVectorData, zvVectorFixed;
+                zend_class_entry *ce = NULL;
+                zend_string *class_name = NULL;
 
                 ZVAL_BOOL(&zvVectorFixed, *cp++);
                 *p = cp;
 
-                amf_invoke_deserialize_callback(rval, AMFC_VECTOR_INT, rval, 1, var_hash);
-                amf_put_in_cache(&(var_hash->objects), rval);
-                
                 array_init_size(&zvVectorData, vectorLen);
 
                 for (iIndex = 0; iIndex < vectorLen; iIndex++) {
@@ -2894,8 +2885,27 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                     ZVAL_LONG(&newval, item);
                     add_index_zval(&zvVectorData, iIndex, &newval);
                 }
-                zend_update_property(Z_OBJCE_P(rval), rval, "data", sizeof("data") - 1, &zvVectorData);
-                zval_ptr_dtor(&zvVectorData);
+
+                if ((class_name = get_userland_class_name(AMFC_VECTOR)) != NULL && (ce = zend_lookup_class(class_name)) != NULL) {
+                    ZVAL_LONG(&zvVectorType, AMF3_VECTOR_INT);
+                    object_init_ex(rval, ce);
+                    zend_update_property(Z_OBJCE_P(rval), rval, "type", sizeof("type") - 1, &zvVectorType);
+                    zend_update_property(Z_OBJCE_P(rval), rval, "fixed", sizeof("fixed") - 1, &zvVectorFixed);
+                    zend_update_property(Z_OBJCE_P(rval), rval, "data", sizeof("data") - 1, &zvVectorData);
+                    zval_ptr_dtor(&zvVectorType);
+                    zval_ptr_dtor(&zvVectorFixed);
+                    zval_ptr_dtor(&zvVectorData);
+                }
+                else {
+                    object_init(rval);
+                    add_property_string(rval, "type", "vector-int");
+                    add_property_zval(rval, "fixed", &zvVectorFixed);
+                    add_property_zval(rval, "data", &zvVectorData);
+                    zval_ptr_dtor(&zvVectorFixed);
+                    zval_ptr_dtor(&zvVectorData);
+                }
+
+                amf_put_in_cache(&(var_hash->objects), rval);
             }
             else {
                 if (amf_get_from_cache(&(var_hash->objects), rval, (handle >> 1)) == FAILURE) {
@@ -2911,13 +2921,12 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                 const unsigned char *cp = *p;
                 int iIndex;
                 int vectorLen = handle >> 1;
-                zval zvVectorData, zvVectorFixed;
+                zval zvVectorType, zvVectorData, zvVectorFixed;
+                zend_class_entry *ce = NULL;
+                zend_string *class_name = NULL;
 
                 ZVAL_BOOL(&zvVectorFixed, *cp++);
                 *p = cp;
-
-                amf_invoke_deserialize_callback(rval, AMFC_VECTOR_UINT, rval, 1, var_hash);
-                amf_put_in_cache(&(var_hash->objects), rval);
 
                 array_init_size(&zvVectorData, vectorLen);
 
@@ -2932,8 +2941,27 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                     }
                     add_index_zval(&zvVectorData, iIndex, &newval);
                 }
-                zend_update_property(Z_OBJCE_P(rval), rval, "data", sizeof("data") - 1, &zvVectorData);
-                zval_ptr_dtor(&zvVectorData);
+
+                if ((class_name = get_userland_class_name(AMFC_VECTOR)) != NULL && (ce = zend_lookup_class(class_name)) != NULL) {
+                    ZVAL_LONG(&zvVectorType, AMF3_VECTOR_UINT);
+                    object_init_ex(rval, ce);
+                    zend_update_property(Z_OBJCE_P(rval), rval, "type", sizeof("type") - 1, &zvVectorType);
+                    zend_update_property(Z_OBJCE_P(rval), rval, "fixed", sizeof("fixed") - 1, &zvVectorFixed);
+                    zend_update_property(Z_OBJCE_P(rval), rval, "data", sizeof("data") - 1, &zvVectorData);
+                    zval_ptr_dtor(&zvVectorType);
+                    zval_ptr_dtor(&zvVectorFixed);
+                    zval_ptr_dtor(&zvVectorData);
+                }
+                else {
+                    object_init(rval);
+                    add_property_string(rval, "type", "vector-uint");
+                    add_property_zval(rval, "fixed", &zvVectorFixed);
+                    add_property_zval(rval, "data", &zvVectorData);
+                    zval_ptr_dtor(&zvVectorFixed);
+                    zval_ptr_dtor(&zvVectorData);
+                }
+
+                amf_put_in_cache(&(var_hash->objects), rval);
             }
             else {
                 if (amf_get_from_cache(&(var_hash->objects), rval, (handle >> 1)) == FAILURE) {
@@ -2949,13 +2977,12 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                 const unsigned char *cp = *p;
                 int iIndex;
                 int vectorLen = handle >> 1;
-                zval zvVectorData, zvVectorFixed;
+                zval zvVectorType, zvVectorData, zvVectorFixed;
+                zend_class_entry *ce = NULL;
+                zend_string *class_name = NULL;
 
                 ZVAL_BOOL(&zvVectorFixed, *cp++);
                 *p = cp;
-
-                amf_invoke_deserialize_callback(rval, AMFC_VECTOR_DOUBLE, rval, 1, var_hash);
-                amf_put_in_cache(&(var_hash->objects), rval);
 
                 array_init_size(&zvVectorData, vectorLen);
 
@@ -2965,8 +2992,27 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                     ZVAL_DOUBLE(&newval, item);
                     add_index_zval(&zvVectorData, iIndex, &newval);
                 }
-                zend_update_property(Z_OBJCE_P(rval), rval, "data", sizeof("data") - 1, &zvVectorData);
-                zval_ptr_dtor(&zvVectorData);
+                
+                if ((class_name = get_userland_class_name(AMFC_VECTOR)) != NULL && (ce = zend_lookup_class(class_name)) != NULL) {
+                    ZVAL_LONG(&zvVectorType, AMF3_VECTOR_DOUBLE);
+                    object_init_ex(rval, ce);
+                    zend_update_property(Z_OBJCE_P(rval), rval, "type", sizeof("type") - 1, &zvVectorType);
+                    zend_update_property(Z_OBJCE_P(rval), rval, "fixed", sizeof("fixed") - 1, &zvVectorFixed);
+                    zend_update_property(Z_OBJCE_P(rval), rval, "data", sizeof("data") - 1, &zvVectorData);
+                    zval_ptr_dtor(&zvVectorType);
+                    zval_ptr_dtor(&zvVectorFixed);
+                    zval_ptr_dtor(&zvVectorData);
+                }
+                else {
+                    object_init(rval);
+                    add_property_string(rval, "type", "vector-double");
+                    add_property_zval(rval, "fixed", &zvVectorFixed);
+                    add_property_zval(rval, "data", &zvVectorData);
+                    zval_ptr_dtor(&zvVectorFixed);
+                    zval_ptr_dtor(&zvVectorData);
+                }
+
+                amf_put_in_cache(&(var_hash->objects), rval);
             }
             else {
                 if (amf_get_from_cache(&(var_hash->objects), rval, (handle >> 1)) == FAILURE) {
@@ -2980,23 +3026,32 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
             handle = amf3_read_uint29(p, max, var_hash);
             if ((handle & AMF_INLINE_ENTITY) != 0) {
                 const unsigned char *cp = *p;
-                int iIndex;
+                int iIndex, is_typed_object = 1;
                 int vectorLen = handle >> 1;
-                zval zvVectorData, zvVectorFixed, zvVectorClassName;
+                zval zvVectorType, zvVectorData, zvVectorFixed, zvVectorClassName;
+                zend_class_entry *ce = NULL;
+                zend_string *class_name = NULL;
 
                 ZVAL_BOOL(&zvVectorFixed, *cp++);
                 *p = cp;
 
+                /* Must do the object init and cache before deserializing the data objects because of the order of cache references. */
+                if ((class_name = get_userland_class_name(AMFC_VECTOR)) != NULL && (ce = zend_lookup_class(class_name)) != NULL) {
+                    ZVAL_LONG(&zvVectorType, AMF3_VECTOR_OBJECT);
+                    object_init_ex(rval, ce);
+                }
+                else {
+                    object_init(rval);
+                    is_typed_object = 0;
+                }
+
+                amf_put_in_cache(&(var_hash->objects), rval);
+
                 if (amf3_read_string(&zvVectorClassName, p, max, 1, var_hash) == FAILURE) {
-                    zval_ptr_dtor(&zvVectorData);
-                    zval_ptr_dtor(&zvVectorFixed);
                     zval_ptr_dtor(&zvVectorClassName);
                     php_error_docref(NULL, E_NOTICE, "amf cannot understand vector class_name %X", "");
                     break;
                 }
-
-                amf_invoke_deserialize_callback(rval, AMFC_VECTOR_OBJECT, rval, 1, var_hash);
-                amf_put_in_cache(&(var_hash->objects), rval);
 
                 array_init_size(&zvVectorData, vectorLen);
 
@@ -3010,8 +3065,23 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                     }
                     add_index_zval(&zvVectorData, iIndex, &newval);
                 }
-                zend_update_property(Z_OBJCE_P(rval), rval, "data", sizeof("data") - 1, &zvVectorData);
-                zval_ptr_dtor(&zvVectorData);
+                
+                if (is_typed_object) {
+                    zend_update_property(Z_OBJCE_P(rval), rval, "type", sizeof("type") - 1, &zvVectorType);
+                    zend_update_property(Z_OBJCE_P(rval), rval, "fixed", sizeof("fixed") - 1, &zvVectorFixed);
+                    zend_update_property(Z_OBJCE_P(rval), rval, "data", sizeof("data") - 1, &zvVectorData);
+                    zval_ptr_dtor(&zvVectorType);
+                    zval_ptr_dtor(&zvVectorFixed);
+                    zval_ptr_dtor(&zvVectorData);
+                }
+                else {
+                    object_init(rval);
+                    add_property_string(rval, "type", "vector-object");
+                    add_property_zval(rval, "fixed", &zvVectorFixed);
+                    add_property_zval(rval, "data", &zvVectorData);
+                    zval_ptr_dtor(&zvVectorFixed);
+                    zval_ptr_dtor(&zvVectorData);
+                }
                 zval_ptr_dtor(&zvVectorClassName);
             }
             else {
@@ -3021,7 +3091,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                 }
                 zval_add_ref(rval);
             }
-            break;*/
+            break;
         default:
             php_error_docref(NULL, E_NOTICE, "amf unknown AMF3 type %d", type);
             return FAILURE;

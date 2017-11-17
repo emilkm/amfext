@@ -18,18 +18,15 @@ class AmfDecoder
     const AMFC_BYTEARRAY = 1;
     const AMFC_XML = 2;
     const AMFC_XMLDOCUMENT = 3;
-    const AMFC_VECTOR_INT = 4;
-    const AMFC_VECTOR_UINT = 5;
-    const AMFC_VECTOR_DOUBLE = 6;
-    const AMFC_VECTOR_OBJECT = 7;
-    const AMFC_EXTERNALIZABLE = 8;
+    const AMFC_VECTOR = 4;
+    const AMFC_EXTERNALIZABLE = 5;
 
 	public $userlandTypes = [
         'Date' => self::AMFC_DATE,
         'ByteArray' => self::AMFC_BYTEARRAY,
         'Xml' => self::AMFC_XML,
         'XmlDocument' => self::AMFC_XMLDOCUMENT,
-        'Vector' => self::AMFC_VECTOR_OBJECT
+        'Vector' => self::AMFC_VECTOR
     ];
 
     public $decodeFlags;
