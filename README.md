@@ -34,11 +34,11 @@ For PHP5 see the `php56` branch.
 * Setup AppVeyor.
 * Added scripts for testing through PHP CLI Server, which helped with detecting some issues.
 * Removed userland encoding/deconding callbacks. They were too much trouble. I went for stability over flexibility.
-* Date and ByteArray are now handled in the extension.
+* Date, ByteArray, and Vector are now handled in the extension.
 
 # TODO
 
-* Re-add support for XML, XML Document, Vector.
+* Re-add support for XML, XML Document.
 * Write docs.
 * ...
 
