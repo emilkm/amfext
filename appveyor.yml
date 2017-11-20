@@ -14,7 +14,7 @@ build_script:
 
     wget https://github.com/Microsoft/php-sdk-binary-tools/archive/php-sdk-2.0.13.zip
 
-    7z x -y php-sdk-binary-tools-php-sdk-2.0.13.zip
+    7z x -y php-sdk-2.0.13.zip
 
     C:\projects\php-sdk-binary-tools-php-sdk-2.0.13\bin\phpsdk_setvars.bat
 
