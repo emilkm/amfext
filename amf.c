@@ -3,7 +3,7 @@
  * 
  * amfext (http://emilmalinov.com/amfext)
  *
- * @copyright Copyright (c) 2015 Emil Malinov
+ * @copyright Copyright (c) 2015 - 2017 Emil Malinov
  * @license   http://www.apache.org/licenses/LICENSE-2.0 Apache License 2.0
  * @link      http://github.com/emilkm/amfext
  * @package   amfext
@@ -139,7 +139,7 @@ enum AMF0Codes { AMF0_NUMBER, AMF0_BOOLEAN, AMF0_STRING, AMF0_OBJECT, AMF0_MOVIE
 /** AMF3 types */
 enum AMF3Codes { AMF3_UNDEFINED, AMF3_NULL, AMF3_FALSE, AMF3_TRUE, AMF3_INTEGER, AMF3_NUMBER, AMF3_STRING, AMF3_XMLDOCUMENT, AMF3_DATE, AMF3_ARRAY, AMF3_OBJECT, AMF3_XML, AMF3_BYTEARRAY, AMF3_VECTOR_INT, AMF3_VECTOR_UINT, AMF3_VECTOR_DOUBLE, AMF3_VECTOR_OBJECT };
 
-/** types handled by callbacks */
+/** Object types that require special handling. Used to be handled in a callback. */
 enum AMFCTypes { AMFC_DATE, AMFC_BYTEARRAY, AMFC_XML, AMFC_XMLDOCUMENT, AMFC_VECTOR, AMFC_EXTERNALIZABLE, AMFC_OBJECT, AMFC_TYPEDOBJECT };
 
 /** flags passed to amf_encode and amf_decode */
@@ -148,7 +148,7 @@ enum AMFFlags { AMF_AMF3 = 1, AMF_BIGENDIAN = 2, AMF_OBJECT_AS_ASSOC = 4, AMF3_N
 /** flags for AMF3_OBJECT */
 enum AMF3ObjectDecl { AMF_INLINE_ENTITY = 1, AMF_INLINE_CLASS = 2, AMF_CLASS_EXTERNAL = 4, AMF_CLASS_DYNAMIC = 8, AMF_CLASS_MEMBERCOUNT_SHIFT = 4, AMF_CLASS_SHIFT = 2 };
 
-/** object cache actions **/
+/** object cache actions */
 enum ObjectCacheAction { OCA_LOOKUP_AND_ADD = 0, OCA_ADD_ONLY = 1, OCA_LOOKUP_ONLY = 2 };
 
 /* }}} */
@@ -302,7 +302,12 @@ static void amf_serialize_output_close_chunk(amf_serialize_output buf)
         }
         /* get another chunk at the end */
         buf->last_chunk = (amf_string_chunk *)buf->data;
-        buf->left_in_part -= sizeof(amf_string_chunk);
+        if (buf->left_in_part >= sizeof(amf_string_chunk)) {
+            buf->left_in_part -= sizeof(amf_string_chunk);
+        }
+        else {
+            buf->left_in_part = 0;
+        }
         buf->chunks++;
     }
     else {
@@ -643,7 +648,12 @@ static inline void amf_write_string_zval(amf_serialize_output buf, zval *zval)
         buf->last_chunk->zv = zval;
         Z_ADDREF_P(zval);
         buf->chunks++;
-        buf->left_in_part -= sizeof(amf_string_chunk);
+        if (buf->left_in_part >= sizeof(amf_string_chunk)) {
+            buf->left_in_part -= sizeof(amf_string_chunk);
+        }
+        else {
+            buf->left_in_part = 0;
+        }
 
         /* prepare for a raw chunk */
         buf->last_chunk++;
