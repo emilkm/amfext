@@ -1,5 +1,5 @@
 --TEST--
-Write AMF3 basic parent chlid
+Write AMF3 basic parent child
 --DESCRIPTION--
 Writes a basic parent child in AMF3 format.
 
