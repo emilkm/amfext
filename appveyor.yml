@@ -20,7 +20,7 @@ build_script:
 
     C:\projects\php-sdk-binary-tools-php-sdk-2.0.13\bin\phpsdk_setvars.bat
 
-    git --depth=1 clone --single-branch PHP-7.1.12 https://github.com/php/php-src C:\projects\php-src
+    git clone --depth=1 --single-branch PHP-7.1.12 https://github.com/php/php-src C:\projects\php-src
 
     mkdir C:\projects\php-src\ext\amf
 
