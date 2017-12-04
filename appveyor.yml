@@ -2,7 +2,7 @@ image: Visual Studio 2015
 version: '{branch}.{build}'
 branches:
   only:
-    - master
+  - master
 install:
     - cinst wget
 build_script:
@@ -48,9 +48,9 @@ build_script:
 
     C:\projects\amfext\bin\php.exe -m
 test_script:
-    - cmd: C:\projects\amfext\bin\php.exe -doutput_buffering=0 run-tests.php ext\amf -p C:\projects\amfext\bin\php.exe -q
+  - cmd: C:\projects\amfext\bin\php.exe -doutput_buffering=0 run-tests.php ext\amf -p C:\projects\amfext\bin\php.exe -q
 artifacts:
-    - path: bin
-        name: master
-        type: zip
+  - path: bin
+    name: master
+    type: zip
 
