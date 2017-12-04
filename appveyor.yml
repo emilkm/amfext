@@ -8,6 +8,7 @@ environment:
   - php_ver: 7.1.12
 install:
 - cmd: cinst wget
+- cmd: cinst -y php -version %php_ver%
 build_script:
 - cmd: >-
     REM "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\vcvars32.bat"
