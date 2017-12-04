@@ -11,10 +11,12 @@ build_script:
     REM "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\x86_amd64\vcvarsx86_amd64.bat"
 
     call "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" amd64
+    
+    cd C:\projects
 
     wget -O php-sdk-2.0.13.zip https://github.com/Microsoft/php-sdk-binary-tools/archive/php-sdk-2.0.13.zip
 
-    7z x -y php-sdk-2.0.13.zip
+    7z x -y php-sdk-2.0.13.zip -oC:\projects
 
     C:\projects\php-sdk-binary-tools-php-sdk-2.0.13\bin\phpsdk_setvars.bat
 
