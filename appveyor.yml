@@ -1,14 +1,10 @@
-os: Previous Visual Studio 2015
+image: Visual Studio 2015
 version: '{branch}.{build}'
 branches:
   only:
-  - master
-environment:
-  matrix:
-  - php_ver: 7.1.12
+    - master
 install:
-- cmd: cinst wget
-- cmd: cinst -y php -version %php_ver%
+    - cinst wget
 build_script:
 - cmd: >-
     REM "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\vcvars32.bat"
@@ -24,7 +20,7 @@ build_script:
 
     C:\projects\php-sdk-binary-tools-php-sdk-2.0.13\bin\phpsdk_setvars.bat
 
-    git clone --depth=1 https://github.com/php/php-src C:\projects\php-src
+    git --depth=1 clone --single-branch PHP-7.1.12 https://github.com/php/php-src C:\projects\php-src
 
     mkdir C:\projects\php-src\ext\amf
 
@@ -52,9 +48,9 @@ build_script:
 
     C:\projects\amfext\bin\php.exe -m
 test_script:
-- cmd: C:\projects\amfext\bin\php.exe -doutput_buffering=0 run-tests.php ext\amf -p C:\projects\amfext\bin\php.exe -q
+    - cmd: C:\projects\amfext\bin\php.exe -doutput_buffering=0 run-tests.php ext\amf -p C:\projects\amfext\bin\php.exe -q
 artifacts:
-  - path: bin
-    name: master
-    type: zip
+    - path: bin
+        name: master
+        type: zip
 
