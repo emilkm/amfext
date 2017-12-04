@@ -12,7 +12,7 @@ build_script:
 
     call "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" amd64
 
-    wget https://github.com/Microsoft/php-sdk-binary-tools/archive/php-sdk-2.0.13.zip
+    wget -O php-sdk-2.0.13.zip https://github.com/Microsoft/php-sdk-binary-tools/archive/php-sdk-2.0.13.zip
 
     7z x -y php-sdk-2.0.13.zip
 
