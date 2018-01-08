@@ -1,7 +1,7 @@
 #ifndef PHP_AMF_H
 #define PHP_AMF_H 1
 
-#define PHP_AMF_VERSION "0.0.0.18"
+#define PHP_AMF_VERSION "0.0.0.19"
 #define PHP_AMF_WORLD_EXTNAME "amf"
 
 PHP_FUNCTION(amf_encode);

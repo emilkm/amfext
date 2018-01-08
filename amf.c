@@ -21,10 +21,11 @@
 #include "php_amf.h"
 #include "ext/standard/info.h"
 #include "ext/standard/php_string.h"
-#include "ext/pcre/php_pcre.h"
-#include "ext/date/php_date.h"
-#include "zend_smart_str.h"
 #include "ext/standard/php_mt_rand.h"
+#include "ext/date/php_date.h"
+#include "ext/pcre/php_pcre.h"
+#include "zend_smart_str.h"
+
 
 
 #ifdef COMPILE_DL_AMF
@@ -2785,7 +2786,7 @@ static int amf3_deserialize_var(zval *rval, const unsigned char **p, const unsig
                             }
                             if ((ce = zend_lookup_class(Z_STR(class_name))) == NULL) {
                                 object_init(rval);
-                                add_property_zval(rval, "_explicitType", &class_name);
+                                add_property_zval(rval, "_explicitType", &explicit_type);
                             }
                             else {
                                 object_init_ex(rval, ce);
@@ -3235,7 +3236,7 @@ static int amf0_read_object_data(zval *rval, const unsigned char **p, const unsi
             }
             if ((ce = zend_lookup_class(Z_STR(class_name))) == NULL) {
                 object_init(rval);
-                add_property_zval(rval, "_explicitType", &class_name);
+                add_property_zval(rval, "_explicitType", explicit_type);
             }
             else {
                 object_init_ex(rval, ce);

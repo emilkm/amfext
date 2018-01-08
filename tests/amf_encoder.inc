@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/amf_classes.inc';
 require_once __DIR__ . '/amf_messages.inc';
+require_once __DIR__ . '/amf_packet.inc';
 
 class AmfEncoder
 {
