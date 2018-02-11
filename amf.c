@@ -1680,14 +1680,15 @@ static int amf3_serialize_specific(amf_serialize_output buf, zval *val, amf_cont
         case AMFC_BYTEARRAY: {
             zval rv;
             zval *tval = zend_read_property(Z_OBJCE_P(val), val, "data", sizeof("data") - 1, 0, &rv);
-            ZVAL_COPY_VALUE(&rval, tval);
             if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_BYTEARRAY) == FAILURE) {
                 amf_write_byte(buf, AMF3_BYTEARRAY);
                 amf3_write_uint29(buf, (int)object_index << 1);
             }
-            else if (Z_TYPE(rval) == IS_STRING) {
+            else if (Z_TYPE_P(tval) == IS_STRING) {
+                zend_string *barr = zend_string_dup(Z_STR_P(tval), 0);
                 amf_write_byte(buf, AMF3_BYTEARRAY);
-                amf3_write_string_zval(buf, &rval, var_hash);
+                amf3_write_string_zstr(buf, barr, var_hash);
+                zend_string_release(barr);
             }
             else {
                 amf_write_byte(buf, AMF3_UNDEFINED);
