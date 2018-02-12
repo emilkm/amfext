@@ -1,7 +1,7 @@
 --TEST--
-Write AMF3 ByteArray and reference
+Write AMF3 ByteArray and no string reference
 --DESCRIPTION--
-Writes a ByteArray and reference in AMF3 format.
+Writes a ByteArray and no string reference in AMF3 format.
 
 
 
@@ -12,11 +12,10 @@ Writes a ByteArray and reference in AMF3 format.
 include 'amf_encoder.inc';
 $encoder = new AmfEncoder();
 $encoder->setAvmPlus(true);
-$data = unserialize(file_get_contents(__DIR__ . '/asset/value/bytearray-and-reference.amf3'));
+$data = unserialize(file_get_contents(__DIR__ . '/asset/value/bytearray-no-string-reference.amf3'));
 $obj = new stdClass();
-$bytearr = new ByteArray('1a2b3c');
-$obj->value1 = $bytearr;
-$obj->value2 = $bytearr;
+$obj->value1 = new ByteArray('1a2b3c');
+$obj->value2 = new ByteArray('1a2b3c');
 $res = $encoder->run($obj);
 echo ($res === $data) ? 'same' : 'diff';
 ?>
