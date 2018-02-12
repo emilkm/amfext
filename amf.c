@@ -1001,7 +1001,10 @@ static inline void amf3_write_emptystring(amf_serialize_output buf)
     amf_write_byte(buf, 1);
 }
 
-/** writes a string from CHAR * in AMF3 format */
+/** 
+ * Writes a string from CHAR * in AMF3 format. Pass NULL var_hash to skip caching the string.
+ * Pass NULL var_hash to skip caching the string.
+ */
 static int amf3_write_string(amf_serialize_output buf, const char *cp, size_t len, amf_context_data_t *var_hash)
 {
     if (len == 0) {
@@ -1012,10 +1015,9 @@ static int amf3_write_string(amf_serialize_output buf, const char *cp, size_t le
         php_error_docref(NULL, E_NOTICE, "amf3 cannot write strings longer than %d", AMF3_UINT29_MAX);
         return -1;
     }
-    else {
+    else if (var_hash != NULL) {
         zval *val;
         if ((val = zend_hash_str_find(&(var_hash->strings), (char *)cp, len)) != NULL) {
-            
             amf3_write_uint29(buf, ((int)Z_LVAL_P(val) - 1) << 1);
             return (int)Z_LVAL_P(val) - 1;
         }
@@ -1025,15 +1027,22 @@ static int amf3_write_string(amf_serialize_output buf, const char *cp, size_t le
             ZVAL_LONG(&val, index);
             zend_hash_str_add(&(var_hash->strings), (char *)cp, len, &val);
             amf3_write_uint29(buf, (((int)len << 1) | AMF_INLINE_ENTITY));
-
             amf_write_string(buf, cp, len);
             return index - 1;
         }
     }
+    else {
+        amf3_write_uint29(buf, (((int)len << 1) | AMF_INLINE_ENTITY));
+        amf_write_string(buf, cp, len);
+        return -1;
+    }
 }
 
 
-/** writes a string from ZSTR in AMF3 format. Useful for memory reference optimization */
+/** 
+ * Write a string from ZSTR in AMF3 format. Useful for memory reference optimization. 
+ * Pass NULL var_hash to skip caching the string. 
+ */
 static int amf3_write_string_zstr(amf_serialize_output buf, zend_string *zs, amf_context_data_t *var_hash)
 {
     if (ZSTR_LEN(zs) == 0) {
@@ -1044,7 +1053,7 @@ static int amf3_write_string_zstr(amf_serialize_output buf, zend_string *zs, amf
         php_error_docref(NULL, E_NOTICE, "amf3 cannot write strings longer than %d", AMF3_UINT29_MAX);
         return -1;
     }
-    else {
+    else if (var_hash != NULL) {
         zval *val;
         if ((val = zend_hash_find(&(var_hash->strings), zs)) != NULL) {
             amf3_write_uint29(buf, ((int)Z_LVAL_P(val) - 1) << 1);
@@ -1056,14 +1065,21 @@ static int amf3_write_string_zstr(amf_serialize_output buf, zend_string *zs, amf
             ZVAL_LONG(&val, index);
             zend_hash_add(&(var_hash->strings), zs, &val);
             amf3_write_uint29(buf, ((int)(ZSTR_LEN(zs) << 1) | AMF_INLINE_ENTITY));
-
             amf_write_string_zstr(buf, zs);
             return index - 1;
         }
     }
+    else {
+        amf3_write_uint29(buf, ((int)(ZSTR_LEN(zs) << 1) | AMF_INLINE_ENTITY));
+        amf_write_string_zstr(buf, zs);
+        return -1;
+    }
 }
 
-/** writes a string from ZVAL in AMF3 format. Useful for memory reference optimization */
+/** 
+ * Write a string from ZVAL in AMF3 format. Useful for memory reference optimization. 
+ * Pass NULL var_hash to skip caching the string. 
+ */
 static int amf3_write_string_zval(amf_serialize_output buf, zval *zv, amf_context_data_t *var_hash)
 {
     if (Z_STRLEN_P(zv) == 0) {
@@ -1074,7 +1090,7 @@ static int amf3_write_string_zval(amf_serialize_output buf, zval *zv, amf_contex
         php_error_docref(NULL, E_NOTICE, "amf3 cannot write strings longer than %d", AMF3_UINT29_MAX);
         return -1;
     }
-    else {
+    else if (var_hash != NULL) {
         zval *val;
         if ((val = zend_hash_find(&(var_hash->strings), Z_STR_P(zv))) != NULL) {
             amf3_write_uint29(buf, ((int)Z_LVAL_P(val) - 1) << 1);
@@ -1086,10 +1102,14 @@ static int amf3_write_string_zval(amf_serialize_output buf, zval *zv, amf_contex
             ZVAL_LONG(&val, index);
             zend_hash_add(&(var_hash->strings), Z_STR_P(zv), &val);
             amf3_write_uint29(buf, (((int)Z_STRLEN_P(zv) << 1) | AMF_INLINE_ENTITY));
-
             amf_write_string_zval(buf, zv);
             return index - 1;
         }
+    }
+    else {
+        amf3_write_uint29(buf, (((int)Z_STRLEN_P(zv) << 1) | AMF_INLINE_ENTITY));
+        amf_write_string_zval(buf, zv);
+        return -1;
     }
 }
 
@@ -1662,7 +1682,6 @@ static int amf3_serialize_specific(amf_serialize_output buf, zval *val, amf_cont
     switch (amfc_type) {
         case AMFC_DATE:
             amf_serialize_date(buf, &rval, is_userland, val, var_hash);
-
             if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_DATE) == FAILURE) {
                 amf_write_byte(buf, AMF3_DATE);
                 amf3_write_uint29(buf, (int)object_index << 1);
@@ -1678,21 +1697,23 @@ static int amf3_serialize_specific(amf_serialize_output buf, zval *val, amf_cont
             }
             break;
         case AMFC_BYTEARRAY: {
-            zval rv;
-            zval *tval = zend_read_property(Z_OBJCE_P(val), val, "data", sizeof("data") - 1, 0, &rv);
             if (amf_cache_object_typed(var_hash, val, &object_index, 1, OCA_LOOKUP_AND_ADD, AMFC_BYTEARRAY) == FAILURE) {
                 amf_write_byte(buf, AMF3_BYTEARRAY);
                 amf3_write_uint29(buf, (int)object_index << 1);
             }
-            else if (Z_TYPE_P(tval) == IS_STRING) {
-                zend_string *barr = zend_string_dup(Z_STR_P(tval), 0);
-                amf_write_byte(buf, AMF3_BYTEARRAY);
-                amf3_write_string_zstr(buf, barr, var_hash);
-                zend_string_release(barr);
-            }
             else {
-                amf_write_byte(buf, AMF3_UNDEFINED);
-                php_error_docref(NULL, E_NOTICE, "amf encoding AMFC_BYTEARRAY requires a string");
+                zval rv;
+                zval *tval = zend_read_property(Z_OBJCE_P(val), val, "data", sizeof("data") - 1, 0, &rv);
+                if (Z_TYPE_P(tval) == IS_STRING) {
+                    zend_string *barr = zend_string_dup(Z_STR_P(tval), 0);
+                    amf_write_byte(buf, AMF3_BYTEARRAY);
+                    amf3_write_string_zstr(buf, barr, NULL); /* do not cache the string when writing byte array */
+                    zend_string_release(barr);
+                }
+                else {
+                    amf_write_byte(buf, AMF3_UNDEFINED);
+                    php_error_docref(NULL, E_NOTICE, "amf encoding AMFC_BYTEARRAY requires a string");
+                }
             }
         }    break;
         /*case AMFC_XML:
