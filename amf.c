@@ -1002,7 +1002,7 @@ static inline void amf3_write_emptystring(amf_serialize_output buf)
 }
 
 /** 
- * Writes a string from CHAR * in AMF3 format. Pass NULL var_hash to skip caching the string.
+ * Writes a string from CHAR * in AMF3 format.
  * Pass NULL var_hash to skip caching the string.
  */
 static int amf3_write_string(amf_serialize_output buf, const char *cp, size_t len, amf_context_data_t *var_hash)
