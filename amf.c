@@ -1639,7 +1639,7 @@ static void amf_serialize_date(amf_serialize_output buf, zval *rval, int is_user
         int length = 0;
         char buffer[33];
         smart_str dts = { 0 };
-        length = slprintf(buffer, 32, "%03d", (int)floor(dateobj->time->f * 1000 + 0.5)); //same as format 'v'
+        length = slprintf(buffer, sizeof(buffer), "%03d", (int)floor(dateobj->time->us / 1000)); //same as format 'v'
         smart_str_append_long(&dts, dateobj->time->sse);
         smart_str_appendl(&dts, buffer, length);
         smart_str_0(&dts);
