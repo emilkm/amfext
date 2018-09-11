@@ -7,10 +7,6 @@ install:
     - cinst wget
 build_script:
 - cmd: >-
-    REM "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\vcvars32.bat"
-    REM "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\x86_amd64\vcvarsx86_amd64.bat"
-
-    call "C:\Program Files (x86)\Microsoft Visual Studio 15.0\VC\vcvarsall.bat" amd64
     
     cd C:\projects
 
