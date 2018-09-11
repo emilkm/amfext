@@ -1230,6 +1230,7 @@ static void amf3_serialize_vector(amf_serialize_output buf, HashTable *ht, amf_c
 
 static void amf3_serialize_var(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash)
 {
+again:
     switch (Z_TYPE_P(val)) {
         case IS_TRUE:
             amf_write_byte(buf, AMF3_TRUE);
@@ -1280,7 +1281,10 @@ static void amf3_serialize_var(amf_serialize_output buf, zval *val, amf_context_
                 amf3_serialize_array(buf, Z_ARRVAL_P(val), var_hash);
             }*/
 			amf3_serialize_array(buf, Z_ARRVAL_P(val), var_hash);
-        }   return;
+        }   return;    
+        case IS_REFERENCE:
+            val = Z_REFVAL_P(val);
+			goto again;
         default:
             php_error_docref(NULL, E_NOTICE, "amf unknown PHP type %d\n", Z_TYPE_P(val));
             amf_write_byte(buf, AMF3_UNDEFINED);
@@ -1884,6 +1888,7 @@ static int amf0_serialize_specific(amf_serialize_output buf, zval *val, amf_cont
 
 static void amf0_serialize_var(amf_serialize_output buf, zval *val, amf_context_data_t *var_hash)
 {
+again:
     switch (Z_TYPE_P(val)) {
         case IS_TRUE:
             amf_write_byte(buf, AMF0_BOOLEAN);
@@ -1934,6 +1939,9 @@ static void amf0_serialize_var(amf_serialize_output buf, zval *val, amf_context_
             }*/
 			amf0_serialize_array(buf, Z_ARRVAL_P(val), var_hash);
         }    return;
+        case IS_REFERENCE:
+            val = Z_REFVAL_P(val);
+			goto again;
         default:
             php_error_docref(NULL, E_NOTICE, "amf cannot understand php type %d", Z_TYPE_P(val));
             amf_write_byte(buf, AMF0_UNDEFINED);
