@@ -1,4 +1,4 @@
-image: Visual Studio 2015
+image: Visual Studio 2017
 version: '{branch}.{build}'
 branches:
   only:
@@ -10,25 +10,21 @@ build_script:
     REM "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\vcvars32.bat"
     REM "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\x86_amd64\vcvarsx86_amd64.bat"
 
-    call "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat" amd64
+    call "C:\Program Files (x86)\Microsoft Visual Studio 15.0\VC\vcvarsall.bat" amd64
     
     cd C:\projects
 
-    wget -O php-sdk-2.0.13.zip https://github.com/Microsoft/php-sdk-binary-tools/archive/php-sdk-2.0.13.zip
+    wget -O php-sdk-2.1.8.zip https://github.com/Microsoft/php-sdk-binary-tools/archive/php-sdk-2.1.8.zip
 
-    7z x -y php-sdk-2.0.13.zip -oC:\projects
+    7z x -y php-sdk-2.1.8.zip -oC:\projects
 
-    C:\projects\php-sdk-binary-tools-php-sdk-2.0.13\bin\phpsdk_setvars.bat
+    C:\projects\php-sdk-binary-tools-php-sdk-2.1.8\bin\phpsdk_setvars.bat
 
-    git clone --depth=1 --single-branch --branch="PHP-7.1.12" https://github.com/php/php-src C:\projects\php-src
+    git clone --depth=1 --single-branch --branch="PHP-7.2.9" https://github.com/php/php-src C:\projects\php-src
 
     mkdir C:\projects\php-src\ext\amf
 
     xcopy C:\projects\amfext C:\projects\php-src\ext\amf /s /e /y
-
-    wget http://windows.php.net/downloads/php-sdk/deps-7.1-vc14-x64.7z
-
-    7z x -y deps-7.1-vc14-x64.7z -oC:\projects\php-src
 
     cd C:\projects\php-src
 
