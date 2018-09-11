@@ -8,6 +8,8 @@ install:
 build_script:
 - cmd: >-
     
+    call "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvars64.bat"
+    
     cd C:\projects
 
     wget -O php-sdk-2.1.8.zip https://github.com/Microsoft/php-sdk-binary-tools/archive/php-sdk-2.1.8.zip
